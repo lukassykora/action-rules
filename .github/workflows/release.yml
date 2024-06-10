@@ -56,8 +56,8 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install poetry
-          pip install mkdocs mkdocs-include-markdown-plugin mkdocs-material mkdocstrings
-          pip install mkdocs-material-extension mkdocs-autorefs
+          pip install mkdocs mkdocs-include-markdown-plugin mkdocstrings
+          pip install mkdocs-material-extensions mkdocs-material mkdocs-autorefs
           pip install -e .
 
       - name: build documentation
