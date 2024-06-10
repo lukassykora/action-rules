@@ -37,7 +37,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install poetry tox tox-gh-actions
           pip install pytest black isort mypy flake8 flake8-docstrings pytest-cov pandas
-          pip install .
+          pip install -e .
 
       - name: test with tox
         run:
