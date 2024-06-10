@@ -42,9 +42,8 @@ jobs:
         run:
           tox
 
-      - name: generate coverage report
-        run:
-          pytest --cov=src/action_rules --cov-branch --cov-report=term-missing tests
+      - name: test cov
+        run: pytest --cov=src/action_rules --cov-branch --cov-report=term-missing tests
 
       - name: list files
         run: ls -l .
