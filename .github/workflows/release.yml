@@ -57,12 +57,6 @@ jobs:
           poetry install -E doc
           poetry run mkdocs build
 
-      - name: publish documentation
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./site
-
       - name: Build wheels and source tarball
         run: >-
           poetry build
@@ -70,6 +64,12 @@ jobs:
       - name: show temporary files
         run: >-
           ls -l
+
+      - name: publish documentation
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
 
       - name: create github release
         id: create_release
