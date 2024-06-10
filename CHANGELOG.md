@@ -49,3 +49,7 @@
 ## [0.0.12] - 2024-06-11
 
 * Publish documentation - next try.
+
+## [0.0.13] - 2024-06-11
+
+* Publish documentation - next try.
