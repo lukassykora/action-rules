@@ -29,3 +29,7 @@
 ## [0.0.7] - 2024-06-11
 
 * Fix Codecov for GitHub Actions.
+
+## [0.0.8] - 2024-06-11
+
+* Publish documentation.
