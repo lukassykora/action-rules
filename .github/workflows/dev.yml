@@ -39,8 +39,11 @@ jobs:
           pip install pytest black isort mypy flake8 flake8-docstrings pytest-cov
 
       - name: test with tox
-        run: |
+        run:
           tox
+
+      - name: generate coverage report
+        run:
           pytest --cov=src/action_rules --cov-branch --cov-report=term-missing tests
 
       - name: list files
