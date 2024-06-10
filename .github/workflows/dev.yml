@@ -40,6 +40,7 @@ jobs:
 
       - name: test with tox
         run:
+          source $(poetry env info -p)/bin/activate
           tox
 
       - name: list files
