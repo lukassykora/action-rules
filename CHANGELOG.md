@@ -15,7 +15,9 @@
 ## 0.0.4 (2024-06-10)
 
 * New repository.
+* Tests.
 
 ## 0.0.5 (2024-06-10)
 
 * Readme.
+* GitHub Actions.
