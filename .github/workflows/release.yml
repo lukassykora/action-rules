@@ -67,6 +67,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./site
+          enable_jekyll: true
 
       - name: Build wheels and source tarball
         run: >-
