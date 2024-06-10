@@ -36,14 +36,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install poetry tox tox-gh-actions
-          pip install pytest black isort mypy flake8 flake8-docstrings pytest-cov
+          pip install pytest black isort mypy flake8 flake8-docstrings pytest-cov pandas
 
       - name: test with tox
         run:
           tox
 
       - name: test cov
-        run: pytest --cov=src/action_rules --cov-branch --cov-report=term-missing tests
+        run:
+          pytest --cov=src/action_rules --cov-branch --cov-report=term-missing tests
 
       - name: list files
         run: ls -l .
