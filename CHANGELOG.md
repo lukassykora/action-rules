@@ -25,3 +25,7 @@
 ## [0.0.6] - 2024-06-10
 
 * Fix Codecov.
+
+## [0.0.7] - 2024-06-11
+
+* Fix Codecov for GitHub Actions.
