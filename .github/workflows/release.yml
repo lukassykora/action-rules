@@ -20,7 +20,8 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: write
-
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
     strategy:
       matrix:
         python-versions: [ 3.12 ]
@@ -64,10 +65,10 @@ jobs:
 
       - name: publish documentation
         uses: peaceiris/actions-gh-pages@v4
+        if: github.ref == 'refs/heads/main'
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./site
-          enable_jekyll: true
 
       - name: Build wheels and source tarball
         run: >-
