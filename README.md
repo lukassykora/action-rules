@@ -14,8 +14,8 @@ The package for action rules mining using Action-Apriori (Apriori Modified for A
 
 ## Installation
 
-```commandline
-pip install action-rules
+``` console
+$ pip install action-rules
 ```
 
 ## Features
@@ -71,8 +71,8 @@ print(action_rules.get_rules().get_export_notation())
 
 ### Action Rules CLI
 
-```commandline
-action-rules --min_stable_attributes 2 --min_flexible_attributes 1 --min_undesired_support 1 --min_undesired_confidence 0.5 --min_desired_support 1 --min_desired_confidence 0.5 --csv_path 'data.csv' --stable_attributes 'Sex, Age' --flexible_attributes 'Class, Embarked' --target 'Survived' --undesired_state '0' --desired_state '1' --output_json_path 'output.json'
+``` console
+$ action-rules --min_stable_attributes 2 --min_flexible_attributes 1 --min_undesired_support 1 --min_undesired_confidence 0.5 --min_desired_support 1 --min_desired_confidence 0.5 --csv_path 'data.csv' --stable_attributes 'Sex, Age' --flexible_attributes 'Class, Embarked' --target 'Survived' --undesired_state '0' --desired_state '1' --output_json_path 'output.json'
 ```
 
 ## Jupyter Notebook Example

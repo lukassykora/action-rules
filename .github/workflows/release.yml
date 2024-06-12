@@ -70,17 +70,10 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload site dir
           path: './site'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
-     # - name: publish documentation
-     #   uses: peaceiris/actions-gh-pages@v4
-     #   with:
-     #     github_token: ${{ secrets.GITHUB_TOKEN }}
-     #     publish_dir: ./site
 
       - name: Build wheels and source tarball
         run: >-
