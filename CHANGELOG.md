@@ -82,4 +82,6 @@
 
 * Publish documentation - next try.
 
+## [0.0.20] - 2024-06-12
 
+* Numpy style documentation.
