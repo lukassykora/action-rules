@@ -61,3 +61,7 @@
 ## [0.0.15] - 2024-06-12
 
 * Publish documentation - next try.
+
+## [0.0.16] - 2024-06-12
+
+* Publish documentation - next try.
