@@ -74,4 +74,8 @@
 
 * Publish documentation - next try.
 
+## [0.0.18] - 2024-06-12
+
+* Publish documentation - next try.
+
 
