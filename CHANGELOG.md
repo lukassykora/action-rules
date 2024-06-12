@@ -85,3 +85,7 @@
 ## [0.0.21] - 2024-06-12
 
 * Numpy style documentation.
+
+## [0.0.22] - 2024-06-12
+
+* Import rules.
