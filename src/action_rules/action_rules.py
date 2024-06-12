@@ -9,7 +9,6 @@ import pandas as pd
 from .candidates.candidate_generator import CandidateGenerator
 from .output.output import Output
 from .rules.rules import Rules
-from .input.input import Input
 
 
 class ActionRules:
@@ -285,18 +284,3 @@ class ActionRules:
             return None
         else:
             return self.output
-
-    def import_rules(self, json_data: str):
-        """
-        Import action rules.
-
-        Returns
-        -------
-        Input
-            The class for importing action rules.
-        """
-        if self.rules is None:
-            self.rules = Rules()
-
-        input = Input()
-        input.import_rules(json_data)
