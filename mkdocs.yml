@@ -53,6 +53,9 @@ plugins:
       handlers:
         python:
           paths: [ src ]
+          load_external_modules: true
+          options:
+            docstring_style: numpy
 extra:
   social:
     - icon: fontawesome/brands/twitter
