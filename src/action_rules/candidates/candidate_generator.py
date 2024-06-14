@@ -1,8 +1,7 @@
 """Class CandidateGenerator."""
 
 import copy
-
-import pandas as pd
+from typing import Union
 
 from action_rules.rules import Rules
 
@@ -114,8 +113,8 @@ class CandidateGenerator:
         itemset_prefix: tuple,
         stable_items_binding: dict,
         flexible_items_binding: dict,
-        undesired_mask: pd.Series,
-        desired_mask: pd.Series,
+        undesired_mask: Union['cudf.Series', 'pandas.Series'],
+        desired_mask: Union['cudf.Series', 'pandas.Series'],
         actionable_attributes: int,
         stop_list: list,
         stop_list_itemset: list,
@@ -136,9 +135,9 @@ class CandidateGenerator:
             Dictionary containing bindings for stable items.
         flexible_items_binding : dict
             Dictionary containing bindings for flexible items.
-        undesired_mask : pd.Series
+        undesired_mask : Union['cudf.Series', 'pandas.Series']
             Mask for the undesired state.
-        desired_mask : pd.Series
+        desired_mask : Union['cudf.Series', 'pandas.Series']
             Mask for the desired state.
         actionable_attributes : int
             Number of actionable attributes.
@@ -198,16 +197,16 @@ class CandidateGenerator:
         return new_branches
 
     def get_frames(
-        self, undesired_mask: pd.Series, desired_mask: pd.Series, undesired_state: str, desired_state: str
+        self, undesired_mask: Union['cudf.Series', 'pandas.Series'], desired_mask: Union['cudf.Series', 'pandas.Series'], undesired_state: str, desired_state: str
     ) -> tuple:
         """
         Get the frames for the undesired and desired states.
 
         Parameters
         ----------
-        undesired_mask : pd.Series
+        undesired_mask : Union['cudf.Series', 'pandas.Series']
             Mask for the undesired state.
-        desired_mask : pd.Series
+        desired_mask : Union['cudf.Series', 'pandas.Series']
             Mask for the desired state.
         undesired_state : str
             The undesired state of the target attribute.
@@ -270,8 +269,8 @@ class CandidateGenerator:
         reduced_stable_items_binding: dict,
         stop_list: list,
         stable_candidates: dict,
-        undesired_frame: pd.DataFrame,
-        desired_frame: pd.DataFrame,
+        undesired_frame: Union['cudf.DataFrame', 'pandas.DataFrame'],
+        desired_frame: Union['cudf.DataFrame', 'pandas.DataFrame'],
         new_branches: list,
         verbose: bool,
     ):
@@ -290,9 +289,9 @@ class CandidateGenerator:
             List of stop combinations.
         stable_candidates : dict
             Dictionary containing stable candidates.
-        undesired_frame : pd.DataFrame
+        undesired_frame : Union['cudf.DataFrame', 'pandas.DataFrame']
             Data frame for the undesired state.
-        desired_frame : pd.DataFrame
+        desired_frame : Union['cudf.DataFrame', 'pandas.DataFrame']
             Data frame for the desired state.
         new_branches : list
             List of new branches generated.
@@ -336,8 +335,8 @@ class CandidateGenerator:
         stop_list: list,
         stop_list_itemset: list,
         flexible_candidates: dict,
-        undesired_frame: pd.DataFrame,
-        desired_frame: pd.DataFrame,
+        undesired_frame: Union['cudf.DataFrame', 'pandas.DataFrame'],
+        desired_frame: Union['cudf.DataFrame', 'pandas.DataFrame'],
         actionable_attributes: int,
         new_branches: list,
         verbose: bool,
@@ -359,9 +358,9 @@ class CandidateGenerator:
             List of stop itemsets.
         flexible_candidates : dict
             Dictionary containing flexible candidates.
-        undesired_frame : pd.DataFrame
+        undesired_frame : Union['cudf.DataFrame', 'pandas.DataFrame']
             Data frame for the undesired state.
-        desired_frame : pd.DataFrame
+        desired_frame : Union['cudf.DataFrame', 'pandas.DataFrame']
             Data frame for the desired state.
         actionable_attributes : int
             Number of actionable attributes.
@@ -415,8 +414,8 @@ class CandidateGenerator:
         items: list,
         itemset_prefix: tuple,
         stop_list_itemset: list,
-        undesired_frame: pd.DataFrame,
-        desired_frame: pd.DataFrame,
+        undesired_frame: Union['cudf.DataFrame', 'pandas.DataFrame'],
+        desired_frame: Union['cudf.DataFrame', 'pandas.DataFrame'],
         flexible_candidates: dict,
         verbose: bool,
     ):
@@ -433,9 +432,9 @@ class CandidateGenerator:
             Prefix of the itemset.
         stop_list_itemset : list
             List of stop itemsets.
-        undesired_frame : pd.DataFrame
+        undesired_frame : Union['cudf.DataFrame', 'pandas.DataFrame']
             Data frame for the undesired state.
-        desired_frame : pd.DataFrame
+        desired_frame : Union['cudf.DataFrame', 'pandas.DataFrame']
             Data frame for the desired state.
         flexible_candidates : dict
             Dictionary containing flexible candidates.

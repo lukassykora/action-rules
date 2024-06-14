@@ -2,9 +2,8 @@
 
 import itertools
 from collections import defaultdict
-from typing import Optional
-
-import pandas as pd
+from typing import Optional, Union
+import warnings
 
 from .candidates.candidate_generator import CandidateGenerator
 from .output.output import Output
@@ -90,21 +89,34 @@ class ActionRules:
         self.rules = None  # type: Optional[Rules]
         self.output = None  # type: Optional[Output]
 
+    def get_dataframe_library(self, use_gpu: bool) -> Union['cudf', 'pandas']:
+        if use_gpu:
+            try:
+                import cudf as pd
+            except ImportError:
+                warnings.warn("cuDF is not available. Falling back to pandas.")
+                import pandas as pd
+        else:
+            import pandas as pd
+
+        return pd
+
     def fit(
         self,
-        data: pd.DataFrame,
+        data: Union['cudf.DataFrame', 'pandas.DataFrame'],
         stable_attributes: list,
         flexible_attributes: list,
         target: str,
         undesired_state: str,
         desired_state: str,
+        use_gpu: bool = False,
     ):
         """
         Generate action rules based on the provided dataset and parameters.
 
         Parameters
         ----------
-        data : pd.DataFrame
+        data : Union[cudf.DataFrame, pandas.DataFrame]
             The dataset to generate action rules from.
         stable_attributes : list
             List of stable attributes.
@@ -116,7 +128,10 @@ class ActionRules:
             The undesired state of the target attribute.
         desired_state : str
             The desired state of the target attribute.
+        use_gpu : bool, optional
+            Use GPU (cuDF) for data processing if available.
         """
+        pd = self.get_dataframe_library(use_gpu)
         data = data.astype(str)
         data_stable = pd.get_dummies(data[stable_attributes], sparse=False, prefix_sep='_<item_stable>_')
         data_flexible = pd.get_dummies(data[flexible_attributes], sparse=False, prefix_sep='_<item_flexible>_')
@@ -175,14 +190,14 @@ class ActionRules:
         self.output = Output(self.rules.action_rules, target)
 
     def get_bindings(
-        self, data: pd.DataFrame, stable_attributes: list, flexible_attributes: list, target: str
+        self, data: Union['cudf.DataFrame', 'pandas.DataFrame'], stable_attributes: list, flexible_attributes: list, target: str
     ) -> tuple:
         """
         Bind attributes to corresponding columns in the dataset.
 
         Parameters
         ----------
-        data : pd.DataFrame
+        data : Union[cudf.DataFrame, pandas.DataFrame]
             The dataset containing the attributes.
         stable_attributes : list
             List of stable attributes.
@@ -247,13 +262,13 @@ class ActionRules:
             stop_list.append(tuple([item, item]))
         return stop_list
 
-    def get_split_tables(self, data: pd.DataFrame, target_items_binding: dict, target: str) -> dict:
+    def get_split_tables(self, data: Union['cudf.DataFrame', 'pandas.DataFrame'], target_items_binding: dict, target: str) -> dict:
         """
         Split the dataset into tables based on target item bindings.
 
         Parameters
         ----------
-        data : pd.DataFrame
+        data : Union[cudf.DataFrame, pandas.DataFrame]
             The dataset to be split.
         target_items_binding : dict
             Dictionary containing bindings for target items.
