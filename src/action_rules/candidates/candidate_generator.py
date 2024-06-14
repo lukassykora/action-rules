@@ -1,9 +1,13 @@
 """Class CandidateGenerator."""
 
 import copy
-from typing import Union
+from typing import TYPE_CHECKING, Union
 
 from action_rules.rules import Rules
+
+if TYPE_CHECKING:
+    import cudf
+    import pandas
 
 
 class CandidateGenerator:
@@ -197,7 +201,11 @@ class CandidateGenerator:
         return new_branches
 
     def get_frames(
-        self, undesired_mask: Union['cudf.Series', 'pandas.Series'], desired_mask: Union['cudf.Series', 'pandas.Series'], undesired_state: str, desired_state: str
+        self,
+        undesired_mask: Union['cudf.Series', 'pandas.Series'],
+        desired_mask: Union['cudf.Series', 'pandas.Series'],
+        undesired_state: str,
+        desired_state: str,
     ) -> tuple:
         """
         Get the frames for the undesired and desired states.

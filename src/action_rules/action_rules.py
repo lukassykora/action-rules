@@ -1,13 +1,17 @@
 """Main class ActionRules."""
 
 import itertools
-from collections import defaultdict
-from typing import Optional, Union
 import warnings
+from collections import defaultdict
+from typing import TYPE_CHECKING, Optional, Union
 
 from .candidates.candidate_generator import CandidateGenerator
 from .output.output import Output
 from .rules.rules import Rules
+
+if TYPE_CHECKING:
+    import cudf
+    import pandas
 
 
 class ActionRules:
@@ -90,6 +94,29 @@ class ActionRules:
         self.output = None  # type: Optional[Output]
 
     def get_dataframe_library(self, use_gpu: bool) -> Union['cudf', 'pandas']:
+        """
+        Return the appropriate DataFrame library (cuDF or pandas) based on the user's preference and availability.
+
+        Parameters
+        ----------
+        use_gpu : bool
+            Indicates whether to use GPU (cuDF) for data processing if available.
+
+        Returns
+        -------
+        Union[cudf, pandas]
+            The cuDF library if `use_gpu` is True and cuDF is available; otherwise, the pandas library.
+
+        Raises
+        ------
+        ImportError
+            If `use_gpu` is True but cuDF is not available and pandas cannot be imported as fallback.
+
+        Warnings
+        --------
+        UserWarning
+            If `use_gpu` is True but cuDF is not available, a warning is issued indicating fallback to pandas.
+        """
         if use_gpu:
             try:
                 import cudf as pd
@@ -190,7 +217,11 @@ class ActionRules:
         self.output = Output(self.rules.action_rules, target)
 
     def get_bindings(
-        self, data: Union['cudf.DataFrame', 'pandas.DataFrame'], stable_attributes: list, flexible_attributes: list, target: str
+        self,
+        data: Union['cudf.DataFrame', 'pandas.DataFrame'],
+        stable_attributes: list,
+        flexible_attributes: list,
+        target: str,
     ) -> tuple:
         """
         Bind attributes to corresponding columns in the dataset.
@@ -262,7 +293,9 @@ class ActionRules:
             stop_list.append(tuple([item, item]))
         return stop_list
 
-    def get_split_tables(self, data: Union['cudf.DataFrame', 'pandas.DataFrame'], target_items_binding: dict, target: str) -> dict:
+    def get_split_tables(
+        self, data: Union['cudf.DataFrame', 'pandas.DataFrame'], target_items_binding: dict, target: str
+    ) -> dict:
         """
         Split the dataset into tables based on target item bindings.
 

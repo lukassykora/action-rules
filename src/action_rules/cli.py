@@ -168,7 +168,7 @@ def main(
         int(min_desired_support),
         float(min_desired_confidence),
     )
-    pd = action_rules.get_dataframe_library()
+    pd = action_rules.get_dataframe_library(use_gpu)
     data = pd.read_csv(os.path.abspath(csv_path.name))
     action_rules.fit(
         data,
@@ -177,7 +177,7 @@ def main(
         str(target),
         str(undesired_state),
         str(desired_state),
-        use_gpu
+        use_gpu,
     )
     rules = action_rules.get_rules()
     if rules is not None:
