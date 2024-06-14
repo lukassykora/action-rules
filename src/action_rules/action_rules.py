@@ -128,6 +128,48 @@ class ActionRules:
 
         return pd
 
+    def transform_dataframe(
+        self, use_gpu: bool, pd: Union['cudf', 'pandas'], data: Union['cudf.DataFrame', 'pandas.DataFrame']
+    ) -> Union['cudf.DataFrame', 'pandas.DataFrame']:
+        """
+        Transform the input DataFrame to the appropriate type based on the user's preference for GPU usage.
+
+        Parameters
+        ----------
+        use_gpu : bool
+            Indicates whether to use GPU (cuDF) for data processing if available.
+        pd : Union[cudf, pandas]
+            The DataFrame library to use (cuDF or pandas).
+        data : Union[cudf.DataFrame, pandas.DataFrame]
+            The input DataFrame to be transformed.
+
+        Returns
+        -------
+        Union[cudf.DataFrame, pandas.DataFrame]
+            The transformed DataFrame of the appropriate type (cuDF or pandas).
+
+        Raises
+        ------
+        ImportError
+            If `use_gpu` is True but cuDF is not available and the data needs to be transformed to cuDF.
+        """
+        # Check if data needs to be transformed to the appropriate DataFrame type
+        if isinstance(data, pd.DataFrame):
+            # Data is already a cuDF or Pandas DataFrame, no transformation needed
+            return data
+        elif use_gpu:
+            # Data needs transform from pandas to cudf
+            try:
+                import cudf
+
+                data = cudf.from_pandas(data)
+                return data
+            except ImportError:
+                raise ImportError("cuDF is not available. Please install cuDF or set use_gpu=False.")
+        else:
+            # Data needs transform from cudf to pandas
+            return data.to_pandas()
+
     def fit(
         self,
         data: Union['cudf.DataFrame', 'pandas.DataFrame'],
@@ -159,6 +201,7 @@ class ActionRules:
             Use GPU (cuDF) for data processing if available.
         """
         pd = self.get_dataframe_library(use_gpu)
+        data = self.transform_dataframe(use_gpu, pd, data)
         data = data.astype(str)
         data_stable = pd.get_dummies(data[stable_attributes], sparse=False, prefix_sep='_<item_stable>_')
         data_flexible = pd.get_dummies(data[flexible_attributes], sparse=False, prefix_sep='_<item_flexible>_')
