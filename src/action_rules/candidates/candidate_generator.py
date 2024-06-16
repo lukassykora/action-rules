@@ -117,8 +117,8 @@ class CandidateGenerator:
         itemset_prefix: tuple,
         stable_items_binding: dict,
         flexible_items_binding: dict,
-        undesired_mask: Union['cudf.Series', 'pandas.Series'],
-        desired_mask: Union['cudf.Series', 'pandas.Series'],
+        undesired_mask: Union['cudf.Series', 'pandas.Series', None],
+        desired_mask: Union['cudf.Series', 'pandas.Series', None],
         actionable_attributes: int,
         stop_list: list,
         stop_list_itemset: list,
@@ -202,8 +202,8 @@ class CandidateGenerator:
 
     def get_frames(
         self,
-        undesired_mask: Union['cudf.Series', 'pandas.Series'],
-        desired_mask: Union['cudf.Series', 'pandas.Series'],
+        undesired_mask: Union['cudf.Series', 'pandas.Series', None],
+        desired_mask: Union['cudf.Series', 'pandas.Series', None],
         undesired_state: str,
         desired_state: str,
     ) -> tuple:
@@ -229,9 +229,15 @@ class CandidateGenerator:
         if undesired_mask is None:
             return self.frames[undesired_state], self.frames[desired_state]
         else:
-            undesired_frame = self.frames[undesired_state].multiply(undesired_mask, axis="index")
-            desired_frame = self.frames[desired_state].multiply(desired_mask, axis="index")
-            return undesired_frame, desired_frame
+            undesired_frame = self.frames[undesired_state]
+            undesired_frame = undesired_frame.T * undesired_mask
+            desired_frame = self.frames[desired_state]
+            desired_frame = desired_frame.T * desired_mask
+
+            # undesired_frame = self.frames[undesired_state].multiply(undesired_mask, axis="index")
+            # desired_frame = self.frames[desired_state].multiply(desired_mask, axis="index")
+
+            return undesired_frame.T, desired_frame.T
 
     def reduce_candidates_by_min_attributes(
         self, k: int, actionable_attributes: int, stable_items_binding: dict, flexible_items_binding: dict
