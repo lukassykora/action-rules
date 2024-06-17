@@ -47,6 +47,14 @@ class Rules:
         self.undesired_state = undesired_state
         self.desired_state = desired_state
         self.action_rules = []  # type: list
+        self.undesired_prefixes_without_conf = set()
+        self.desired_prefixes_without_conf = set()
+
+    def add_prefix_without_conf(self, prefix: tuple, is_desired: bool):
+        if is_desired:
+            self.desired_prefixes_without_conf.add(prefix)
+        else:
+            self.undesired_prefixes_without_conf.add(prefix)
 
     def add_classification_rules(self, new_ar_prefix, itemset_prefix, undesired_states, desired_states):
         """
@@ -88,11 +96,7 @@ class Rules:
         """Generate action rules from classification rules."""
         for attribute_prefix, rules in self.classification_rules.items():
             for desired_rule in rules['desired']:
-                if desired_rule['confidence'] is None:
-                    continue
                 for undesired_rule in rules['undesired']:
-                    if undesired_rule['confidence'] is None:
-                        continue
                     uplift = self.calculate_uplift(
                         undesired_rule['support'],
                         undesired_rule['confidence'],
@@ -114,8 +118,13 @@ class Rules:
         del_prefixes = []
         for attribute_prefix, rules in self.classification_rules.items():
             if k == len(attribute_prefix):
-                if len(rules['desired']) == 0 or len(rules['undesired']) == 0:
-                    stop_list.append(attribute_prefix)
+                len_desired = len(rules['desired'])
+                len_undesired = len(rules['undesired'])
+                if len_desired == 0 or len_undesired == 0:
+                    if (len_desired == 0 and attribute_prefix not in self.desired_prefixes_without_conf) or (
+                        len_undesired == 0 and attribute_prefix not in self.undesired_prefixes_without_conf
+                    ):
+                        stop_list.append(attribute_prefix)
                     del_prefixes.append(attribute_prefix)
         for attribute_prefix in del_prefixes:
             del self.classification_rules[attribute_prefix]

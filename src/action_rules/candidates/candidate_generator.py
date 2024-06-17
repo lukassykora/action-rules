@@ -396,6 +396,7 @@ class CandidateGenerator:
                 attribute,
                 items,
                 itemset_prefix,
+                new_ar_prefix,
                 stop_list_itemset,
                 undesired_frame,
                 desired_frame,
@@ -431,6 +432,7 @@ class CandidateGenerator:
         attribute: str,
         items: list,
         itemset_prefix: tuple,
+        new_ar_prefix: tuple,
         stop_list_itemset: list,
         undesired_frame: Union['cudf.DataFrame', 'pandas.DataFrame'],
         desired_frame: Union['cudf.DataFrame', 'pandas.DataFrame'],
@@ -487,7 +489,7 @@ class CandidateGenerator:
                 if undesired_conf >= self.min_undesired_confidence:
                     undesired_states.append({'item': item, 'support': undesired_support, 'confidence': undesired_conf})
                 else:
-                    undesired_states.append({'item': item, 'support': undesired_support, 'confidence': None})
+                    self.rules.add_prefix_without_conf(new_ar_prefix, False)
 
             desired_conf = self.rules.calculate_confidence(desired_support, undesired_support)
             if desired_support >= self.min_desired_support:
@@ -495,7 +497,7 @@ class CandidateGenerator:
                 if desired_conf >= self.min_desired_confidence:
                     desired_states.append({'item': item, 'support': desired_support, 'confidence': desired_conf})
                 else:
-                    desired_states.append({'item': item, 'support': desired_support, 'confidence': None})
+                    self.rules.add_prefix_without_conf(new_ar_prefix, True)
 
             if desired_support < self.min_desired_support and undesired_support < self.min_undesired_support:
                 flexible_candidates[attribute].remove(item)
