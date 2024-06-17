@@ -4,11 +4,10 @@ import copy
 from typing import TYPE_CHECKING, Union
 
 from action_rules.rules import Rules
+import pandas
 
 if TYPE_CHECKING:
     import cudf
-    import pandas
-
 
 class CandidateGenerator:
     """
@@ -230,14 +229,19 @@ class CandidateGenerator:
             return self.frames[undesired_state], self.frames[desired_state]
         else:
             undesired_frame = self.frames[undesired_state]
-            undesired_frame = undesired_frame.T * undesired_mask
             desired_frame = self.frames[desired_state]
-            desired_frame = desired_frame.T * desired_mask
+            if isinstance(undesired_mask, pandas.Series):
+                # For pandas
+                undesired_frame = self.frames[undesired_state].multiply(undesired_mask, axis="index")
+                desired_frame = self.frames[desired_state].multiply(desired_mask, axis="index")
+            else:
+                # For cuDF
+                desired_frame = desired_frame.T * desired_mask
+                desired_frame = desired_frame.T
+                undesired_frame = undesired_frame.T * undesired_mask
+                undesired_frame = undesired_frame.T
 
-            # undesired_frame = self.frames[undesired_state].multiply(undesired_mask, axis="index")
-            # desired_frame = self.frames[desired_state].multiply(desired_mask, axis="index")
-
-            return undesired_frame.T, desired_frame.T
+            return undesired_frame, desired_frame
 
     def reduce_candidates_by_min_attributes(
         self, k: int, actionable_attributes: int, stable_items_binding: dict, flexible_items_binding: dict
@@ -482,12 +486,16 @@ class CandidateGenerator:
                 undesired_count += 1
                 if undesired_conf >= self.min_undesired_confidence:
                     undesired_states.append({'item': item, 'support': undesired_support, 'confidence': undesired_conf})
+                else:
+                    undesired_states.append({'item': item, 'support': undesired_support, 'confidence': None})
 
             desired_conf = self.rules.calculate_confidence(desired_support, undesired_support)
             if desired_support >= self.min_desired_support:
                 desired_count += 1
                 if desired_conf >= self.min_desired_confidence:
                     desired_states.append({'item': item, 'support': desired_support, 'confidence': desired_conf})
+                else:
+                    desired_states.append({'item': item, 'support': desired_support, 'confidence': None})
 
             if desired_support < self.min_desired_support and undesired_support < self.min_undesired_support:
                 flexible_candidates[attribute].remove(item)
@@ -535,7 +543,7 @@ class CandidateGenerator:
             new_branch['stable_items_binding'] = new_stable
             new_branch['flexible_items_binding'] = new_flexible
 
-    def in_stop_list(self, ar_prefix, stop_list):
+    def in_stop_list(self, ar_prefix: tuple, stop_list: list) -> bool:
         """
         Check if the action rule prefix is in the stop list.
 

@@ -88,7 +88,11 @@ class Rules:
         """Generate action rules from classification rules."""
         for attribute_prefix, rules in self.classification_rules.items():
             for desired_rule in rules['desired']:
+                if desired_rule['confidence'] is None:
+                    continue
                 for undesired_rule in rules['undesired']:
+                    if undesired_rule['confidence'] is None:
+                        continue
                     uplift = self.calculate_uplift(
                         undesired_rule['support'],
                         undesired_rule['confidence'],
