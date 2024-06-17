@@ -47,10 +47,20 @@ class Rules:
         self.undesired_state = undesired_state
         self.desired_state = desired_state
         self.action_rules = []  # type: list
-        self.undesired_prefixes_without_conf = set()
-        self.desired_prefixes_without_conf = set()
+        self.undesired_prefixes_without_conf = set()  # type: set
+        self.desired_prefixes_without_conf = set()  # type: set
 
     def add_prefix_without_conf(self, prefix: tuple, is_desired: bool):
+        """
+        Add a prefix to the set of prefixes without conflicts.
+
+        Parameters
+        ----------
+        prefix : tuple
+            The prefix to be added.
+        is_desired : bool
+            If True, add the prefix to the desired prefixes set; otherwise, add it to the undesired prefixes set.
+        """
         if is_desired:
             self.desired_prefixes_without_conf.add(prefix)
         else:

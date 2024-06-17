@@ -177,6 +177,7 @@ def test_process_items(candidate_generator):
     attribute = 'income'
     items = ['income_<item_flexible>_low']
     itemset_prefix = tuple()
+    new_ar_prefix = tuple()
     stop_list_itemset = []
     undesired_frame = pd.DataFrame({'income_<item_flexible>_low': [1, 0, 0]})
     desired_frame = pd.DataFrame({'income_<item_flexible>_low': [0, 1, 0]})
@@ -185,6 +186,7 @@ def test_process_items(candidate_generator):
         attribute,
         items,
         itemset_prefix,
+        new_ar_prefix,
         stop_list_itemset,
         undesired_frame,
         desired_frame,

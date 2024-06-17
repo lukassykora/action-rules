@@ -3,11 +3,13 @@
 import copy
 from typing import TYPE_CHECKING, Union
 
-from action_rules.rules import Rules
 import pandas
+
+from action_rules.rules import Rules
 
 if TYPE_CHECKING:
     import cudf
+
 
 class CandidateGenerator:
     """
@@ -450,6 +452,8 @@ class CandidateGenerator:
             List of items for the attribute.
         itemset_prefix : tuple
             Prefix of the itemset.
+        new_ar_prefix : tuple
+            Prefix for stop list.
         stop_list_itemset : list
             List of stop itemsets.
         undesired_frame : Union['cudf.DataFrame', 'pandas.DataFrame']
