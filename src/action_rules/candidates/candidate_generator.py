@@ -118,8 +118,8 @@ class CandidateGenerator:
         itemset_prefix: tuple,
         stable_items_binding: dict,
         flexible_items_binding: dict,
-        undesired_mask: Union['cudf.Series', 'pandas.Series', None],
-        desired_mask: Union['cudf.Series', 'pandas.Series', None],
+        undesired_mask: Union['np.ndarray', 'cupy.ndarray', None],
+        desired_mask: Union['np.ndarray', 'cupy.ndarray', None],
         actionable_attributes: int,
         stop_list: list,
         stop_list_itemset: list,
@@ -203,10 +203,10 @@ class CandidateGenerator:
 
     def get_frames(
         self,
-        undesired_mask: Union['cudf.Series', 'pandas.Series', None],
-        desired_mask: Union['cudf.Series', 'pandas.Series', None],
-        undesired_state: str,
-        desired_state: str,
+        undesired_mask: Union['np.ndarray', 'cupy.ndarray', None],
+        desired_mask: Union['np.ndarray', 'cupy.ndarray', None],
+        undesired_state: int,
+        desired_state: int,
     ) -> tuple:
         """
         Get the frames for the undesired and desired states.
@@ -230,18 +230,8 @@ class CandidateGenerator:
         if undesired_mask is None:
             return self.frames[undesired_state], self.frames[desired_state]
         else:
-            undesired_frame = self.frames[undesired_state]
-            desired_frame = self.frames[desired_state]
-            if isinstance(undesired_mask, pandas.Series):
-                # For pandas
-                undesired_frame = self.frames[undesired_state].multiply(undesired_mask, axis="index")
-                desired_frame = self.frames[desired_state].multiply(desired_mask, axis="index")
-            else:
-                # For cuDF
-                desired_frame = desired_frame.T * desired_mask
-                desired_frame = desired_frame.T
-                undesired_frame = undesired_frame.T * undesired_mask
-                undesired_frame = undesired_frame.T
+            undesired_frame = self.frames[undesired_state] * undesired_mask
+            desired_frame = self.frames[desired_state] * desired_mask
 
             return undesired_frame, desired_frame
 
@@ -289,8 +279,8 @@ class CandidateGenerator:
         reduced_stable_items_binding: dict,
         stop_list: list,
         stable_candidates: dict,
-        undesired_frame: Union['cudf.DataFrame', 'pandas.DataFrame'],
-        desired_frame: Union['cudf.DataFrame', 'pandas.DataFrame'],
+        undesired_frame: Union['np.ndarray', 'cupy.ndarray'],
+        desired_frame: Union['np.ndarray', 'cupy.ndarray'],
         new_branches: list,
         verbose: bool,
     ):

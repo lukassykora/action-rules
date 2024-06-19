@@ -5,13 +5,12 @@ import warnings
 from collections import defaultdict
 from typing import TYPE_CHECKING, Optional, Union
 
+import numpy as np
+import pandas as pd
+
 from .candidates.candidate_generator import CandidateGenerator
 from .output.output import Output
 from .rules.rules import Rules
-
-if TYPE_CHECKING:
-    import cudf
-    import pandas
 
 
 class ActionRules:
@@ -93,7 +92,7 @@ class ActionRules:
         self.rules = None  # type: Optional[Rules]
         self.output = None  # type: Optional[Output]
 
-    def get_dataframe_library(self, use_gpu: bool) -> Union['cudf', 'pandas']:
+    def get_array_library(self, use_gpu: bool) -> Union['cupy', 'numpy']:
         """
         Return the appropriate DataFrame library (cuDF or pandas) based on the user's preference and availability.
 
@@ -119,60 +118,34 @@ class ActionRules:
         """
         if use_gpu:
             try:
-                import cudf as pd
+                import cupy as np
             except ImportError:
-                warnings.warn("cuDF is not available. Falling back to pandas.")
-                import pandas as pd
+                warnings.warn("CuPy is not available. Falling back to Numpy.")
+                import numpy as np
         else:
-            import pandas as pd
+            import numpy as np
 
-        return pd
+        return np
 
-    def transform_dataframe(
-        self, use_gpu: bool, pd: Union['cudf', 'pandas'], data: Union['cudf.DataFrame', 'pandas.DataFrame']
-    ) -> Union['cudf.DataFrame', 'pandas.DataFrame']:
-        """
-        Transform the input DataFrame to the appropriate type based on the user's preference for GPU usage.
+    def df_to_array(self, df: pd.DataFrame, use_gpu: bool = False) -> Union['numpy.ndarray', 'cupy.ndarray']:
+        columns = df.columns
+        data = df.to_numpy(dtype=np.uint8)
+        if use_gpu:
+            cp = self.get_array_library(use_gpu)
+            data = cp.asarray(data, dtype=cp.uint8)
+        return data.T, columns
 
-        Parameters
-        ----------
-        use_gpu : bool
-            Indicates whether to use GPU (cuDF) for data processing if available.
-        pd : Union[cudf, pandas]
-            The DataFrame library to use (cuDF or pandas).
-        data : Union[cudf.DataFrame, pandas.DataFrame]
-            The input DataFrame to be transformed.
-
-        Returns
-        -------
-        Union[cudf.DataFrame, pandas.DataFrame]
-            The transformed DataFrame of the appropriate type (cuDF or pandas).
-
-        Raises
-        ------
-        ImportError
-            If `use_gpu` is True but cuDF is not available and the data needs to be transformed to cuDF.
-        """
-        # Check if data needs to be transformed to the appropriate DataFrame type
-        if isinstance(data, pd.DataFrame):
-            # Data is already a cuDF or Pandas DataFrame, no transformation needed
-            return data
-        elif use_gpu:
-            # Data needs transform from pandas to cudf
-            try:
-                import cudf
-
-                data = cudf.from_pandas(data)
-                return data
-            except ImportError:
-                raise ImportError("cuDF is not available. Please install cuDF or set use_gpu=False.")
-        else:
-            # Data needs transform from cudf to pandas
-            return data.to_pandas()
+    def one_hot_encode(self, data: pd.DataFrame, stable_attributes: list, flexible_attributes: list, target: str) -> pd.DataFrame:
+        data = data.astype(str)
+        data_stable = pd.get_dummies(data[stable_attributes], sparse=False, prefix_sep='_<item_stable>_')
+        data_flexible = pd.get_dummies(data[flexible_attributes], sparse=False, prefix_sep='_<item_flexible>_')
+        data_target = pd.get_dummies(data[[target]], sparse=False, prefix_sep='_<item_target>_')
+        data = pd.concat([data_stable, data_flexible, data_target], axis=1)
+        return data
 
     def fit(
         self,
-        data: Union['cudf.DataFrame', 'pandas.DataFrame'],
+        data: pd.DataFrame,
         stable_attributes: list,
         flexible_attributes: list,
         target: str,
@@ -200,20 +173,16 @@ class ActionRules:
         use_gpu : bool, optional
             Use GPU (cuDF) for data processing if available.
         """
-        pd = self.get_dataframe_library(use_gpu)
-        data = self.transform_dataframe(use_gpu, pd, data)
-        data = data.astype(str)
-        data_stable = pd.get_dummies(data[stable_attributes], sparse=False, prefix_sep='_<item_stable>_')
-        data_flexible = pd.get_dummies(data[flexible_attributes], sparse=False, prefix_sep='_<item_flexible>_')
-        data_target = pd.get_dummies(data[[target]], sparse=False, prefix_sep='_<item_target>_')
-        data = pd.concat([data_stable, data_flexible, data_target], axis=1)
+        data = self.one_hot_encode(data, stable_attributes, flexible_attributes, target)
+        data, columns = self.df_to_array(data, use_gpu)
+
         stable_items_binding, flexible_items_binding, target_items_binding = self.get_bindings(
-            data, stable_attributes, flexible_attributes, target
+            columns, stable_attributes, flexible_attributes, target
         )
         stop_list = self.get_stop_list(stable_items_binding, flexible_items_binding)
-        frames = self.get_split_tables(data, target_items_binding, target)
-        undesired_state = target + '_<item_target>_' + str(undesired_state)
-        desired_state = target + '_<item_target>_' + str(desired_state)
+        frames = self.get_split_tables(data, target_items_binding, target, columns)
+        undesired_state = columns.get_loc(target + '_<item_target>_' + str(undesired_state))
+        desired_state = columns.get_loc(target + '_<item_target>_' + str(desired_state))
 
         stop_list_itemset = []  # type: list
 
@@ -229,7 +198,7 @@ class ActionRules:
             }
         ]
         k = 0
-        self.rules = Rules(undesired_state, desired_state)
+        self.rules = Rules(undesired_state, desired_state, columns)
         candidate_generator = CandidateGenerator(
             frames,
             self.min_stable_attributes,
@@ -261,7 +230,7 @@ class ActionRules:
 
     def get_bindings(
         self,
-        data: Union['cudf.DataFrame', 'pandas.DataFrame'],
+        columns: pd.core.indexes.base.Index,
         stable_attributes: list,
         flexible_attributes: list,
         target: str,
@@ -289,12 +258,12 @@ class ActionRules:
         flexible_items_binding = defaultdict(lambda: [])
         target_items_binding = defaultdict(lambda: [])
 
-        for col in data.columns:
+        for i, col in enumerate(columns):
             is_continue = False
             # stable
             for attribute in stable_attributes:
                 if col.startswith(attribute + '_<item_stable>_'):
-                    stable_items_binding[attribute].append(col)
+                    stable_items_binding[attribute].append(i)
                     is_continue = True
                     break
             if is_continue is True:
@@ -302,14 +271,14 @@ class ActionRules:
             # flexible
             for attribute in flexible_attributes:
                 if col.startswith(attribute + '_<item_flexible>_'):
-                    flexible_items_binding[attribute].append(col)
+                    flexible_items_binding[attribute].append(i)
                     is_continue = True
                     break
             if is_continue is True:
                 continue
             # target
             if col.startswith(target + '_<item_target>_'):
-                target_items_binding[target].append(col)
+                target_items_binding[target].append(i)
         return stable_items_binding, flexible_items_binding, target_items_binding
 
     def get_stop_list(self, stable_items_binding: dict, flexible_items_binding: dict) -> list:
@@ -337,7 +306,7 @@ class ActionRules:
         return stop_list
 
     def get_split_tables(
-        self, data: Union['cudf.DataFrame', 'pandas.DataFrame'], target_items_binding: dict, target: str
+        self, data: Union['numpy.ndarray', 'cupy.ndarray'], target_items_binding: dict, target: str, columns: pd.core.indexes.base.Index,
     ) -> dict:
         """
         Split the dataset into tables based on target item bindings.
@@ -359,7 +328,7 @@ class ActionRules:
         frames = {}
         for item in target_items_binding[target]:
             mask = data[item] == 1
-            frames[item] = data[mask]
+            frames[item] = data[:, mask]
         return frames
 
     def get_rules(self) -> Optional[Output]:

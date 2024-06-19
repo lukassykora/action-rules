@@ -1,6 +1,7 @@
 """Class Rules."""
 
 from collections import defaultdict
+import pandas as pd
 
 
 class Rules:
@@ -32,7 +33,7 @@ class Rules:
         Calculate the uplift of an action rule.
     """
 
-    def __init__(self, undesired_state: str, desired_state: str):
+    def __init__(self, undesired_state: str, desired_state: str, columns: pd.core.indexes.base.Index):
         """
         Initialize the Rules class with the specified undesired and desired states.
 
@@ -45,6 +46,7 @@ class Rules:
         """
         self.classification_rules = defaultdict(lambda: {'desired': [], 'undesired': []})  # type: defaultdict
         self.undesired_state = undesired_state
+        self.columns = columns
         self.desired_state = desired_state
         self.action_rules = []  # type: list
         self.undesired_prefixes_without_conf = set()  # type: set
