@@ -318,7 +318,7 @@ class CandidateGenerator:
                 desired_support = desired_frame[item].sum()
 
                 if verbose:
-                    print('SUPPORT')
+                    print('SUPPORT - itemset, undesired state, desired state')
                     print(itemset_prefix + (item,))
                     print((undesired_support, desired_support))
 
@@ -473,7 +473,7 @@ class CandidateGenerator:
             desired_support = desired_frame[item].sum()
 
             if verbose:
-                print('SUPPORT')
+                print('SUPPORT - itemset, undesired state, desired state')
                 print(itemset_prefix + (item,))
                 print((undesired_support, desired_support))
 
