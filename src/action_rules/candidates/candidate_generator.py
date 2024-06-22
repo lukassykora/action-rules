@@ -229,8 +229,14 @@ class CandidateGenerator:
         if undesired_mask is None:
             return self.frames[undesired_state], self.frames[desired_state]
         else:
-            undesired_frame = self.frames[undesired_state] * undesired_mask
-            desired_frame = self.frames[desired_state] * desired_mask
+            # TODO
+            try:
+                undesired_frame = self.frames[undesired_state].multiply(undesired_mask)
+                desired_frame = self.frames[desired_state].multiply(desired_mask)
+            except:
+                print('ECKO')
+                undesired_frame = self.frames[undesired_state] * undesired_mask
+                desired_frame = self.frames[desired_state] * desired_mask
 
             return undesired_frame, desired_frame
 

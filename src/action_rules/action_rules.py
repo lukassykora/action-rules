@@ -180,9 +180,9 @@ class ActionRules:
         elif is_gpu_np and not is_gpu_pd:
             if use_sparse_matrix:
                 from cupyx.scipy.sparse import csr_matrix
-                data = csr_matrix(df.values())
+                data = csr_matrix(df.values)
             else:
-                data = np.asarray(df.values(), dtype=np.uint8)
+                data = np.asarray(df.values, dtype=np.uint8)
         if not is_gpu_np and is_gpu_pd:
             if use_sparse_matrix:
                 from scipy.sparse import csr_matrix
@@ -192,7 +192,7 @@ class ActionRules:
         elif not is_gpu_np and not is_gpu_pd:
             if use_sparse_matrix:
                 from scipy.sparse import csr_matrix
-                data = csr_matrix(df.values())
+                data = csr_matrix(df.values)
             else:
                 data = df.to_numpy(dtype=np.uint8)
         return data.T, columns
@@ -273,7 +273,7 @@ class ActionRules:
             columns, stable_attributes, flexible_attributes, target
         )
         stop_list = self.get_stop_list(stable_items_binding, flexible_items_binding)
-        frames = self.get_split_tables(data, target_items_binding, target, columns)
+        frames = self.get_split_tables(data, target_items_binding, target, use_gpu, use_sparse_matrix)
         undesired_state = columns.index(target + '_<item_target>_' + str(target_undesired_state))
         desired_state = columns.index(target + '_<item_target>_' + str(target_desired_state))
 
@@ -403,7 +403,8 @@ class ActionRules:
         data: Union['numpy.ndarray', 'cupy.ndarray'],
         target_items_binding: dict,
         target: str,
-        columns: list,
+        use_gpu: bool = False,
+        use_sparse_matrix: bool = False,
     ) -> dict:
         """
         Split the dataset into tables based on target item bindings.
@@ -416,16 +417,24 @@ class ActionRules:
             Dictionary containing bindings for target items.
         target : str
             The target attribute.
+        use_gpu : bool, optional
+            Use GPU for data processing if available.
+        use_sparse_matrix : bool, optional
+            If True, rhe sparse matrix is used. Default is False.
 
         Returns
         -------
         dict
             A dictionary containing the split tables.
         """
+        np, _, _ = self.get_array_library(use_gpu)
         frames = {}
         for item in target_items_binding[target]:
             mask = data[item] == 1
-            frames[item] = data[:, mask]
+            if use_sparse_matrix:
+                frames[item] = data.multiply(mask)
+            else:
+                frames[item] = data[:, mask]
         return frames
 
     def get_rules(self) -> Optional[Output]:
