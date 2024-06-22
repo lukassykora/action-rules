@@ -49,7 +49,6 @@ class Output:
         """
         return self.action_rules
 
-
         ar_notation = []
         for action_rule in self.action_rules:
             rule = '['

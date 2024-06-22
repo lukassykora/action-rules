@@ -3,12 +3,11 @@
 import copy
 from typing import TYPE_CHECKING, Union
 
-import pandas
-
 from action_rules.rules import Rules
 
 if TYPE_CHECKING:
-    import cudf
+    import cupy
+    import numpy
 
 
 class CandidateGenerator:
@@ -31,9 +30,9 @@ class CandidateGenerator:
         Minimum confidence for the undesired state.
     min_desired_confidence : float
         Minimum confidence for the desired state.
-    undesired_state : str
+    undesired_state : int
         The undesired state of the target attribute.
-    desired_state : str
+    desired_state : int
         The desired state of the target attribute.
     rules : Rules
         Rules object to store the generated classification rules.
@@ -71,8 +70,8 @@ class CandidateGenerator:
         min_desired_support: int,
         min_undesired_confidence: float,
         min_desired_confidence: float,
-        undesired_state: str,
-        desired_state: str,
+        undesired_state: int,
+        desired_state: int,
         rules: Rules,
     ):
         """
@@ -94,9 +93,9 @@ class CandidateGenerator:
             Minimum confidence for the undesired state.
         min_desired_confidence : float
             Minimum confidence for the desired state.
-        undesired_state : str
+        undesired_state : int
             The undesired state of the target attribute.
-        desired_state : str
+        desired_state : int
             The desired state of the target attribute.
         rules : Rules
             Rules object to store the generated classification rules.
@@ -118,13 +117,13 @@ class CandidateGenerator:
         itemset_prefix: tuple,
         stable_items_binding: dict,
         flexible_items_binding: dict,
-        undesired_mask: Union['np.ndarray', 'cupy.ndarray', None],
-        desired_mask: Union['np.ndarray', 'cupy.ndarray', None],
+        undesired_mask: Union['numpy.ndarray', 'cupy.ndarray', None],
+        desired_mask: Union['numpy.ndarray', 'cupy.ndarray', None],
         actionable_attributes: int,
         stop_list: list,
         stop_list_itemset: list,
-        undesired_state: str,
-        desired_state: str,
+        undesired_state: int,
+        desired_state: int,
         verbose: bool = False,
     ) -> list:
         """
@@ -140,9 +139,9 @@ class CandidateGenerator:
             Dictionary containing bindings for stable items.
         flexible_items_binding : dict
             Dictionary containing bindings for flexible items.
-        undesired_mask : Union['cudf.Series', 'pandas.Series']
+        undesired_mask : Union['numpy.ndarray', 'cupy.ndarray', None]
             Mask for the undesired state.
-        desired_mask : Union['cudf.Series', 'pandas.Series']
+        desired_mask : Union['numpy.ndarray', 'cupy.ndarray', None]
             Mask for the desired state.
         actionable_attributes : int
             Number of actionable attributes.
@@ -150,9 +149,9 @@ class CandidateGenerator:
             List of stop combinations.
         stop_list_itemset : list
             List of stop itemsets.
-        undesired_state : str
+        undesired_state : int
             The undesired state of the target attribute.
-        desired_state : str
+        desired_state : int
             The desired state of the target attribute.
         verbose : bool, optional
             If True, enables verbose output. Default is False.
@@ -203,8 +202,8 @@ class CandidateGenerator:
 
     def get_frames(
         self,
-        undesired_mask: Union['np.ndarray', 'cupy.ndarray', None],
-        desired_mask: Union['np.ndarray', 'cupy.ndarray', None],
+        undesired_mask: Union['numpy.ndarray', 'cupy.ndarray', None],
+        desired_mask: Union['numpy.ndarray', 'cupy.ndarray', None],
         undesired_state: int,
         desired_state: int,
     ) -> tuple:
@@ -213,13 +212,13 @@ class CandidateGenerator:
 
         Parameters
         ----------
-        undesired_mask : Union['cudf.Series', 'pandas.Series']
+        undesired_mask : Union['numpy.ndarray', 'cupy.ndarray', None]
             Mask for the undesired state.
-        desired_mask : Union['cudf.Series', 'pandas.Series']
+        desired_mask : Union['numpy.ndarray', 'cupy.ndarray', None]
             Mask for the desired state.
-        undesired_state : str
+        undesired_state : int
             The undesired state of the target attribute.
-        desired_state : str
+        desired_state : int
             The desired state of the target attribute.
 
         Returns
@@ -279,8 +278,8 @@ class CandidateGenerator:
         reduced_stable_items_binding: dict,
         stop_list: list,
         stable_candidates: dict,
-        undesired_frame: Union['np.ndarray', 'cupy.ndarray'],
-        desired_frame: Union['np.ndarray', 'cupy.ndarray'],
+        undesired_frame: Union['numpy.ndarray', 'cupy.ndarray'],
+        desired_frame: Union['numpy.ndarray', 'cupy.ndarray'],
         new_branches: list,
         verbose: bool,
     ):
@@ -299,9 +298,9 @@ class CandidateGenerator:
             List of stop combinations.
         stable_candidates : dict
             Dictionary containing stable candidates.
-        undesired_frame : Union['cudf.DataFrame', 'pandas.DataFrame']
+        undesired_frame : Union['numpy.ndarray', 'cupy.ndarray']
             Data frame for the undesired state.
-        desired_frame : Union['cudf.DataFrame', 'pandas.DataFrame']
+        desired_frame : Union['numpy.ndarray', 'cupy.ndarray']
             Data frame for the desired state.
         new_branches : list
             List of new branches generated.
@@ -345,8 +344,8 @@ class CandidateGenerator:
         stop_list: list,
         stop_list_itemset: list,
         flexible_candidates: dict,
-        undesired_frame: Union['cudf.DataFrame', 'pandas.DataFrame'],
-        desired_frame: Union['cudf.DataFrame', 'pandas.DataFrame'],
+        undesired_frame: Union['numpy.ndarray', 'cupy.ndarray'],
+        desired_frame: Union['numpy.ndarray', 'cupy.ndarray'],
         actionable_attributes: int,
         new_branches: list,
         verbose: bool,
@@ -368,9 +367,9 @@ class CandidateGenerator:
             List of stop itemsets.
         flexible_candidates : dict
             Dictionary containing flexible candidates.
-        undesired_frame : Union['cudf.DataFrame', 'pandas.DataFrame']
+        undesired_frame : Union['numpy.ndarray', 'cupy.ndarray']
             Data frame for the undesired state.
-        desired_frame : Union['cudf.DataFrame', 'pandas.DataFrame']
+        desired_frame : Union['numpy.ndarray', 'cupy.ndarray']
             Data frame for the desired state.
         actionable_attributes : int
             Number of actionable attributes.
@@ -426,8 +425,8 @@ class CandidateGenerator:
         itemset_prefix: tuple,
         new_ar_prefix: tuple,
         stop_list_itemset: list,
-        undesired_frame: Union['cudf.DataFrame', 'pandas.DataFrame'],
-        desired_frame: Union['cudf.DataFrame', 'pandas.DataFrame'],
+        undesired_frame: Union['numpy.ndarray', 'cupy.ndarray'],
+        desired_frame: Union['numpy.ndarray', 'cupy.ndarray'],
         flexible_candidates: dict,
         verbose: bool,
     ):
@@ -446,9 +445,9 @@ class CandidateGenerator:
             Prefix for stop list.
         stop_list_itemset : list
             List of stop itemsets.
-        undesired_frame : Union['cudf.DataFrame', 'pandas.DataFrame']
+        undesired_frame : Union['numpy.ndarray', 'cupy.ndarray']
             Data frame for the undesired state.
-        desired_frame : Union['cudf.DataFrame', 'pandas.DataFrame']
+        desired_frame : Union['numpy.ndarray', 'cupy.ndarray']
             Data frame for the desired state.
         flexible_candidates : dict
             Dictionary containing flexible candidates.

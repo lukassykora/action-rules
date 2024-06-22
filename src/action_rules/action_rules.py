@@ -12,6 +12,10 @@ from .candidates.candidate_generator import CandidateGenerator
 from .output.output import Output
 from .rules.rules import Rules
 
+if TYPE_CHECKING:
+    import cupy
+    import numpy
+
 
 class ActionRules:
     """
@@ -92,7 +96,7 @@ class ActionRules:
         self.rules = None  # type: Optional[Rules]
         self.output = None  # type: Optional[Output]
 
-    def get_array_library(self, use_gpu: bool) -> Union['cupy', 'numpy']:
+    def get_array_library(self, use_gpu: bool) -> Union['numpy', 'cupy']:
         """
         Return the appropriate DataFrame library (cuDF or pandas) based on the user's preference and availability.
 
@@ -103,8 +107,8 @@ class ActionRules:
 
         Returns
         -------
-        Union[cudf, pandas]
-            The cuDF library if `use_gpu` is True and cuDF is available; otherwise, the pandas library.
+        Union[cupy, numpy]
+            The cuDF library if `use_gpu` is True and CuPy is available; otherwise, the Numpy library.
 
         Raises
         ------
@@ -127,7 +131,27 @@ class ActionRules:
 
         return np
 
-    def df_to_array(self, df: pd.DataFrame, use_gpu: bool = False) -> Union['numpy.ndarray', 'cupy.ndarray']:
+    def df_to_array(self, df: pd.DataFrame, use_gpu: bool = False) -> tuple:
+        """
+        Convert a pandas DataFrame to a numpy array or a CuPy array.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            The DataFrame to convert.
+        use_gpu : bool, optional
+            If True, the data will be converted to a GPU array using CuPy. Default is False.
+
+        Returns
+        -------
+        tuple
+            A tuple containing the transposed array and the DataFrame columns.
+
+        Notes
+        -----
+        The data is converted to an unsigned 8-bit integer array (`np.uint8`). If `use_gpu` is True,
+        the array is further converted to a CuPy array.
+        """
         columns = df.columns
         data = df.to_numpy(dtype=np.uint8)
         if use_gpu:
@@ -135,7 +159,34 @@ class ActionRules:
             data = cp.asarray(data, dtype=cp.uint8)
         return data.T, columns
 
-    def one_hot_encode(self, data: pd.DataFrame, stable_attributes: list, flexible_attributes: list, target: str) -> pd.DataFrame:
+    def one_hot_encode(
+        self, data: pd.DataFrame, stable_attributes: list, flexible_attributes: list, target: str
+    ) -> pd.DataFrame:
+        """
+        Perform one-hot encoding on the specified stable, flexible, and target attributes of the DataFrame.
+
+        Parameters
+        ----------
+        data : pd.DataFrame
+            The input DataFrame containing the data to be encoded.
+        stable_attributes : list
+            List of stable attributes to be one-hot encoded.
+        flexible_attributes : list
+            List of flexible attributes to be one-hot encoded.
+        target : str
+            The target attribute to be one-hot encoded.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame with the specified attributes one-hot encoded.
+
+        Notes
+        -----
+        The input data is first converted to string type to ensure consistent encoding. The stable attributes,
+        flexible attributes, and target attribute are then one-hot encoded separately and concatenated into a
+        single DataFrame.
+        """
         data = data.astype(str)
         data_stable = pd.get_dummies(data[stable_attributes], sparse=False, prefix_sep='_<item_stable>_')
         data_flexible = pd.get_dummies(data[flexible_attributes], sparse=False, prefix_sep='_<item_flexible>_')
@@ -149,8 +200,8 @@ class ActionRules:
         stable_attributes: list,
         flexible_attributes: list,
         target: str,
-        undesired_state: str,
-        desired_state: str,
+        target_undesired_state: str,
+        target_desired_state: str,
         use_gpu: bool = False,
     ):
         """
@@ -166,9 +217,9 @@ class ActionRules:
             List of flexible attributes.
         target : str
             The target attribute.
-        undesired_state : str
+        target_undesired_state : str
             The undesired state of the target attribute.
-        desired_state : str
+        target_desired_state : str
             The desired state of the target attribute.
         use_gpu : bool, optional
             Use GPU (cuDF) for data processing if available.
@@ -181,8 +232,8 @@ class ActionRules:
         )
         stop_list = self.get_stop_list(stable_items_binding, flexible_items_binding)
         frames = self.get_split_tables(data, target_items_binding, target, columns)
-        undesired_state = columns.get_loc(target + '_<item_target>_' + str(undesired_state))
-        desired_state = columns.get_loc(target + '_<item_target>_' + str(desired_state))
+        undesired_state = columns.get_loc(target + '_<item_target>_' + str(target_undesired_state))
+        desired_state = columns.get_loc(target + '_<item_target>_' + str(target_desired_state))
 
         stop_list_itemset = []  # type: list
 
@@ -306,14 +357,18 @@ class ActionRules:
         return stop_list
 
     def get_split_tables(
-        self, data: Union['numpy.ndarray', 'cupy.ndarray'], target_items_binding: dict, target: str, columns: pd.core.indexes.base.Index,
+        self,
+        data: Union['numpy.ndarray', 'cupy.ndarray'],
+        target_items_binding: dict,
+        target: str,
+        columns: pd.core.indexes.base.Index,
     ) -> dict:
         """
         Split the dataset into tables based on target item bindings.
 
         Parameters
         ----------
-        data : Union[cudf.DataFrame, pandas.DataFrame]
+        data : Union[numpy.ndarray, cupy.ndarray]
             The dataset to be split.
         target_items_binding : dict
             Dictionary containing bindings for target items.
