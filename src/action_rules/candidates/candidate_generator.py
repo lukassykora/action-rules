@@ -73,6 +73,8 @@ class CandidateGenerator:
         undesired_state: int,
         desired_state: int,
         rules: Rules,
+        undesired_mask_matrix: Union['numpy.ndarray', 'cupy.ndarray', None],
+        desired_mask_matrix: Union['numpy.ndarray', 'cupy.ndarray', None],
     ):
         """
         Initialize the CandidateGenerator class with the specified parameters.
@@ -110,6 +112,8 @@ class CandidateGenerator:
         self.undesired_state = undesired_state
         self.desired_state = desired_state
         self.rules = rules
+        self.undesired_mask_matrix = undesired_mask_matrix
+        self.desired_mask_matrix = desired_mask_matrix
 
     def generate_candidates(
         self,
@@ -117,14 +121,15 @@ class CandidateGenerator:
         itemset_prefix: tuple,
         stable_items_binding: dict,
         flexible_items_binding: dict,
-        undesired_mask: Union['numpy.ndarray', 'cupy.ndarray', None],
-        desired_mask: Union['numpy.ndarray', 'cupy.ndarray', None],
+        undesired_mask: Union[int, None],  # TODO Optional
+        desired_mask: Union[int, None],
         actionable_attributes: int,
         stop_list: list,
         stop_list_itemset: list,
         undesired_state: int,
         desired_state: int,
         verbose: bool = False,
+        mask_index: int = 0,
     ) -> list:
         """
         Generate candidate action rules.
@@ -172,7 +177,7 @@ class CandidateGenerator:
 
         new_branches = []  # type: list
 
-        self.process_stable_candidates(
+        mask_index = self.process_stable_candidates(
             ar_prefix,
             itemset_prefix,
             reduced_stable_items_binding,
@@ -182,8 +187,9 @@ class CandidateGenerator:
             desired_frame,
             new_branches,
             verbose,
+            mask_index,
         )
-        self.process_flexible_candidates(
+        mask_index = self.process_flexible_candidates(
             ar_prefix,
             itemset_prefix,
             reduced_flexible_items_binding,
@@ -195,10 +201,11 @@ class CandidateGenerator:
             actionable_attributes,
             new_branches,
             verbose,
+            mask_index,
         )
         self.update_new_branches(new_branches, stable_candidates, flexible_candidates)
 
-        return new_branches
+        return new_branches, mask_index
 
     def get_frames(
         self,
@@ -231,17 +238,17 @@ class CandidateGenerator:
         else:
             # TODO
             try:
-                if undesired_mask.getnnz() > 0:
-                    undesired_frame = self.frames[undesired_state].multiply(undesired_mask)
+                if self.undesired_mask_matrix[undesired_mask].getnnz() > 0:
+                    undesired_frame = self.frames[undesired_state].multiply(self.undesired_mask_matrix[undesired_mask])
                 else:
                     undesired_frame = self.frames[undesired_state] * 0
-                if desired_mask.getnnz() > 0:
-                    desired_frame = self.frames[desired_state].multiply(desired_mask)
+                if self.desired_mask_matrix[desired_mask].getnnz() > 0:
+                    desired_frame = self.frames[desired_state].multiply(self.desired_mask_matrix[desired_mask])
                 else:
                     desired_frame = self.frames[desired_state] * 0
             except:
-                undesired_frame = self.frames[undesired_state] * undesired_mask
-                desired_frame = self.frames[desired_state] * desired_mask
+                undesired_frame = self.frames[undesired_state] * self.undesired_mask_matrix[undesired_mask]
+                desired_frame = self.frames[desired_state] * self.desired_mask_matrix[desired_mask]
 
             return undesired_frame, desired_frame
 
@@ -293,6 +300,7 @@ class CandidateGenerator:
         desired_frame: Union['numpy.ndarray', 'cupy.ndarray'],
         new_branches: list,
         verbose: bool,
+        mask_index: int,
     ):
         """
         Process stable candidates to generate new branches.
@@ -336,16 +344,23 @@ class CandidateGenerator:
                     stable_candidates[attribute].remove(item)
                     stop_list.append(new_ar_prefix)
                 else:
+                    # TODO
+                    self.undesired_mask_matrix[mask_index] = undesired_frame[item]
+                    self.desired_mask_matrix[mask_index] = desired_frame[item]
                     new_branches.append(
                         {
                             'ar_prefix': new_ar_prefix,
                             'itemset_prefix': new_ar_prefix,
                             'item': item,
-                            'undesired_mask': undesired_frame[item],
-                            'desired_mask': desired_frame[item],
+                            'undesired_mask': mask_index,
+                            'desired_mask': mask_index,
+                            ##'undesired_mask': undesired_frame[item],
+                            ##'desired_mask': desired_frame[item],
                             'actionable_attributes': 0,
                         }
                     )
+                    mask_index += 1
+        return mask_index
 
     def process_flexible_candidates(
         self,
@@ -360,6 +375,7 @@ class CandidateGenerator:
         actionable_attributes: int,
         new_branches: list,
         verbose: bool,
+        mask_index: int,
     ):
         """
         Process flexible candidates to generate new branches.
@@ -411,16 +427,21 @@ class CandidateGenerator:
                 stop_list.append(ar_prefix + (attribute,))
             else:
                 for item in items:
+                    self.undesired_mask_matrix[mask_index] = undesired_frame[item]
+                    self.desired_mask_matrix[mask_index] = desired_frame[item]
                     new_branches.append(
                         {
                             'ar_prefix': new_ar_prefix,
                             'itemset_prefix': itemset_prefix + (item,),
                             'item': item,
-                            'undesired_mask': undesired_frame[item],
-                            'desired_mask': desired_frame[item],
+                            'undesired_mask': mask_index,
+                            'desired_mask': mask_index,
+                            #'undesired_mask': undesired_frame[item],
+                            #'desired_mask': desired_frame[item],
                             'actionable_attributes': actionable_attributes + 1,
                         }
                     )
+                    mask_index += 1
                 if actionable_attributes + 1 >= self.min_flexible_attributes:
                     self.rules.add_classification_rules(
                         new_ar_prefix,
@@ -428,6 +449,7 @@ class CandidateGenerator:
                         undesired_states,
                         desired_states,
                     )
+        return mask_index
 
     def process_items(
         self,
