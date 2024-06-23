@@ -231,10 +231,15 @@ class CandidateGenerator:
         else:
             # TODO
             try:
-                undesired_frame = self.frames[undesired_state].multiply(undesired_mask)
-                desired_frame = self.frames[desired_state].multiply(desired_mask)
+                if undesired_mask.getnnz() > 0:
+                    undesired_frame = self.frames[undesired_state].multiply(undesired_mask)
+                else:
+                    undesired_frame = self.frames[undesired_state] * 0
+                if desired_mask.getnnz() > 0:
+                    desired_frame = self.frames[desired_state].multiply(desired_mask)
+                else:
+                    desired_frame = self.frames[desired_state] * 0
             except:
-                print('ECKO')
                 undesired_frame = self.frames[undesired_state] * undesired_mask
                 desired_frame = self.frames[desired_state] * desired_mask
 
