@@ -333,7 +333,7 @@ class ActionRules:
             }
         ]
         k = 0
-        self.rules = Rules(undesired_state, desired_state, columns, use_sparse_matrix)
+        self.rules = Rules(undesired_state, desired_state, columns)
         candidate_generator = CandidateGenerator(
             frames,
             self.min_stable_attributes,
@@ -345,6 +345,7 @@ class ActionRules:
             undesired_state,
             desired_state,
             self.rules,
+            use_sparse_matrix,
         )
         while len(candidates_queue) > 0:
             candidate = candidates_queue.pop(0)
@@ -470,7 +471,6 @@ class ActionRules:
         dict
             A dictionary containing the split tables.
         """
-        np, _, _ = self.get_array_library(use_gpu, data)
         frames = {}
         for item in target_items_binding[target]:
             mask = data[item] == 1
