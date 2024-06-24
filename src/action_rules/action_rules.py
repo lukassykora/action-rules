@@ -94,8 +94,23 @@ class ActionRules:
         self.verbose = verbose
         self.rules = None  # type: Optional[Rules]
         self.output = None  # type: Optional[Output]
+        self.np = None
+        self.pd = None
+        self.is_gpu_np = False
+        self.is_gpu_pd = False
 
-    def get_array_library(self, use_gpu: bool, df: ['cudf.DataFrame', 'pandas.DataFrame']) -> tuple:
+    def count_max_nodes(self, stable_items_binding: dict, flexible_items_binding: dict) -> int:
+        values_in_attribute = []
+        for items in list(stable_items_binding.values()) + list(flexible_items_binding.values()):
+            values_in_attribute.append(len(items))
+
+        sum_nodes = 0
+        for i in range(len(values_in_attribute)):
+            for comb in itertools.combinations(values_in_attribute, i + 1):
+                sum_nodes += numpy.prod(comb)
+        return sum_nodes
+
+    def set_array_library(self, use_gpu: bool, df: ['cudf.DataFrame', 'pandas.DataFrame']):
         """
         Return the appropriate DataFrame library (cuDF or pandas) based on the user's preference and availability.
 
@@ -145,7 +160,10 @@ class ActionRules:
             import pandas as pd
             is_gpu_pd = False
 
-        return np, pd, (is_gpu_np, is_gpu_pd)
+        self.np = np
+        self.pd = pd
+        self.is_gpu_np = is_gpu_np
+        self.is_gpu_pd = is_gpu_pd
 
     def df_to_array(self, df: Union['cudf.DataFrame', 'pandas.DataFrame'], use_gpu: bool = False,
                     use_sparse_matrix: bool = False) -> tuple:
@@ -171,34 +189,37 @@ class ActionRules:
         The data is converted to an unsigned 8-bit integer array (`np.uint8`). If `use_gpu` is True,
         the array is further converted to a CuPy array.
         """
-        np, pd, (is_gpu_np, is_gpu_pd) = self.get_array_library(use_gpu, df)
         columns = list(df.columns)
-        if is_gpu_np and is_gpu_pd:
+        # cuDF and CuPy
+        if self.is_gpu_np and self.is_gpu_pd:
             if use_sparse_matrix:
                 from cupyx.scipy.sparse import csr_matrix
                 data = csr_matrix(df.as_gpu_matrix()).T
             else:
-                data = np.asarray(df.as_gpu_matrix(), dtype=np.uint8).T
-        elif is_gpu_np and not is_gpu_pd:
+                data = self.np.asarray(df.as_gpu_matrix(), dtype=self.np.uint8).T
+        # Pandas and CuPy
+        elif self.is_gpu_np and not self.is_gpu_pd:
             if use_sparse_matrix:
                 from scipy.sparse import csr_matrix as scipy_csr_matrix
                 scipy_matrix = scipy_csr_matrix(df.values)
                 from cupyx.scipy.sparse import csc_matrix
                 data = csc_matrix(scipy_matrix, dtype=float).T
             else:
-                data = np.asarray(df.values, dtype=np.uint8).T
-        if not is_gpu_np and is_gpu_pd:
+                data = self.np.asarray(df.values, dtype=self.np.uint8).T
+        # cuDF and Numpy
+        elif not self.is_gpu_np and self.is_gpu_pd:
             if use_sparse_matrix:
                 from scipy.sparse import csr_matrix
                 data = csr_matrix(df.as_gpu_matrix()).T
             else:
-                data = np.asarray(df.as_gpu_matrix(), dtype=np.uint8).T
-        elif not is_gpu_np and not is_gpu_pd:
+                data = self.np.asarray(df.as_gpu_matrix(), dtype=self.np.uint8).T
+        # Pandas and Numpy
+        else:
             if use_sparse_matrix:
                 from scipy.sparse import csr_matrix
                 data = csr_matrix(df.values).T
             else:
-                data = df.to_numpy(dtype=np.uint8).T
+                data = df.to_numpy(dtype=self.np.uint8).T
         return data, columns
 
     def one_hot_encode(
@@ -229,12 +250,11 @@ class ActionRules:
         flexible attributes, and target attribute are then one-hot encoded separately and concatenated into a
         single DataFrame.
         """
-        _, pd, _ = self.get_array_library(use_gpu, data)
         data = data.astype(str)
-        data_stable = pd.get_dummies(data[stable_attributes], sparse=False, prefix_sep='_<item_stable>_')
-        data_flexible = pd.get_dummies(data[flexible_attributes], sparse=False, prefix_sep='_<item_flexible>_')
-        data_target = pd.get_dummies(data[[target]], sparse=False, prefix_sep='_<item_target>_')
-        data = pd.concat([data_stable, data_flexible, data_target], axis=1)
+        data_stable = self.pd.get_dummies(data[stable_attributes], sparse=False, prefix_sep='_<item_stable>_')
+        data_flexible = self.pd.get_dummies(data[flexible_attributes], sparse=False, prefix_sep='_<item_flexible>_')
+        data_target = self.pd.get_dummies(data[[target]], sparse=False, prefix_sep='_<item_target>_')
+        data = self.pd.concat([data_stable, data_flexible, data_target], axis=1)
         return data
 
     def fit(
@@ -270,6 +290,7 @@ class ActionRules:
         use_sparse_matrix : bool, optional
             If True, rhe sparse matrix is used. Default is False.
         """
+        self.set_array_library(use_gpu, data)
         data = self.one_hot_encode(data, stable_attributes, flexible_attributes, target, use_gpu)
         data, columns = self.df_to_array(data, use_gpu, use_sparse_matrix)
 
@@ -295,7 +316,7 @@ class ActionRules:
             }
         ]
         k = 0
-        self.rules = Rules(undesired_state, desired_state, columns)
+        self.rules = Rules(undesired_state, desired_state, columns, use_sparse_matrix)
         candidate_generator = CandidateGenerator(
             frames,
             self.min_stable_attributes,

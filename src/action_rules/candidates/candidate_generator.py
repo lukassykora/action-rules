@@ -73,6 +73,7 @@ class CandidateGenerator:
         undesired_state: int,
         desired_state: int,
         rules: Rules,
+        use_sparse_matrix: bool,
     ):
         """
         Initialize the CandidateGenerator class with the specified parameters.
@@ -99,6 +100,8 @@ class CandidateGenerator:
             The desired state of the target attribute.
         rules : Rules
             Rules object to store the generated classification rules.
+        use_sparse_matrix : bool, optional
+            If True, rhe sparse matrix is used. Default is False.
         """
         self.frames = frames
         self.min_stable_attributes = min_stable_attributes
@@ -110,6 +113,7 @@ class CandidateGenerator:
         self.undesired_state = undesired_state
         self.desired_state = desired_state
         self.rules = rules
+        self.use_sparse_matrix = use_sparse_matrix
 
     def generate_candidates(
         self,
@@ -229,8 +233,7 @@ class CandidateGenerator:
         if undesired_mask is None:
             return self.frames[undesired_state], self.frames[desired_state]
         else:
-            # TODO
-            try:
+            if self.use_sparse_matrix:
                 if undesired_mask.getnnz() > 0:
                     undesired_frame = self.frames[undesired_state].multiply(undesired_mask)
                 else:
@@ -239,7 +242,7 @@ class CandidateGenerator:
                     desired_frame = self.frames[desired_state].multiply(desired_mask)
                 else:
                     desired_frame = self.frames[desired_state] * 0
-            except:
+            else:
                 undesired_frame = self.frames[undesired_state] * undesired_mask
                 desired_frame = self.frames[desired_state] * desired_mask
             del undesired_mask, desired_mask
