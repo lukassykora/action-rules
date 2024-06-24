@@ -242,7 +242,7 @@ class CandidateGenerator:
             except:
                 undesired_frame = self.frames[undesired_state] * undesired_mask
                 desired_frame = self.frames[desired_state] * desired_mask
-
+            del undesired_mask, desired_mask
             return undesired_frame, desired_frame
 
     def reduce_candidates_by_min_attributes(

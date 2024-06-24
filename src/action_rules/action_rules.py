@@ -324,6 +324,7 @@ class ActionRules:
             candidates_queue += new_candidates
         self.rules.generate_action_rules()
         self.output = Output(self.rules.action_rules, target)
+        del data
 
     def get_bindings(
         self,
