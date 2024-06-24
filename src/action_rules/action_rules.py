@@ -240,7 +240,6 @@ class ActionRules:
         stable_attributes: list,
         flexible_attributes: list,
         target: str,
-        use_gpu: bool,
     ) -> Union['cudf.DataFrame', 'pandas.DataFrame']:
         """
         Perform one-hot encoding on the specified stable, flexible, and target attributes of the DataFrame.
@@ -308,7 +307,7 @@ class ActionRules:
             If True, rhe sparse matrix is used. Default is False.
         """
         self.set_array_library(use_gpu, data)
-        data = self.one_hot_encode(data, stable_attributes, flexible_attributes, target, use_gpu)
+        data = self.one_hot_encode(data, stable_attributes, flexible_attributes, target)
         data, columns = self.df_to_array(data, use_gpu, use_sparse_matrix)
 
         stable_items_binding, flexible_items_binding, target_items_binding = self.get_bindings(
