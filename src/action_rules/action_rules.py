@@ -10,9 +10,9 @@ from .output.output import Output
 from .rules.rules import Rules
 
 if TYPE_CHECKING:
+    import cudf
     import cupy
     import numpy
-    import cudf
     import pandas
 
 
@@ -140,24 +140,30 @@ class ActionRules:
         if use_gpu:
             try:
                 import cupy as np
+
                 is_gpu_np = True
             except ImportError:
                 warnings.warn("CuPy is not available. Falling back to Numpy.")
                 import numpy as np
+
                 is_gpu_np = False
         else:
             import numpy as np
+
             is_gpu_np = False
 
         try:
             import cudf as pd
+
             if isinstance(df, pd.DataFrame):
                 is_gpu_pd = True
             else:
                 import pandas as pd
+
                 is_gpu_pd = False
         except ImportError:
             import pandas as pd
+
             is_gpu_pd = False
 
         self.np = np
@@ -165,8 +171,9 @@ class ActionRules:
         self.is_gpu_np = is_gpu_np
         self.is_gpu_pd = is_gpu_pd
 
-    def df_to_array(self, df: Union['cudf.DataFrame', 'pandas.DataFrame'], use_gpu: bool = False,
-                    use_sparse_matrix: bool = False) -> tuple:
+    def df_to_array(
+        self, df: Union['cudf.DataFrame', 'pandas.DataFrame'], use_gpu: bool = False, use_sparse_matrix: bool = False
+    ) -> tuple:
         """
         Convert a pandas DataFrame to a numpy array or a CuPy array.
 
@@ -194,6 +201,7 @@ class ActionRules:
         if self.is_gpu_np and self.is_gpu_pd:
             if use_sparse_matrix:
                 from cupyx.scipy.sparse import csr_matrix
+
                 data = csr_matrix(df.as_gpu_matrix()).T
             else:
                 data = self.np.asarray(df.as_gpu_matrix(), dtype=self.np.uint8).T
@@ -201,8 +209,10 @@ class ActionRules:
         elif self.is_gpu_np and not self.is_gpu_pd:
             if use_sparse_matrix:
                 from scipy.sparse import csr_matrix as scipy_csr_matrix
+
                 scipy_matrix = scipy_csr_matrix(df.values)
                 from cupyx.scipy.sparse import csc_matrix
+
                 data = csc_matrix(scipy_matrix, dtype=float).T
             else:
                 data = self.np.asarray(df.values, dtype=self.np.uint8).T
@@ -210,6 +220,7 @@ class ActionRules:
         elif not self.is_gpu_np and self.is_gpu_pd:
             if use_sparse_matrix:
                 from scipy.sparse import csr_matrix
+
                 data = csr_matrix(df.as_gpu_matrix()).T
             else:
                 data = self.np.asarray(df.as_gpu_matrix(), dtype=self.np.uint8).T
@@ -217,13 +228,19 @@ class ActionRules:
         else:
             if use_sparse_matrix:
                 from scipy.sparse import csr_matrix
+
                 data = csr_matrix(df.values).T
             else:
                 data = df.to_numpy(dtype=self.np.uint8).T
         return data, columns
 
     def one_hot_encode(
-        self, data: Union['cudf.DataFrame', 'pandas.DataFrame'], stable_attributes: list, flexible_attributes: list, target: str, use_gpu: bool
+        self,
+        data: Union['cudf.DataFrame', 'pandas.DataFrame'],
+        stable_attributes: list,
+        flexible_attributes: list,
+        target: str,
+        use_gpu: bool,
     ) -> Union['cudf.DataFrame', 'pandas.DataFrame']:
         """
         Perform one-hot encoding on the specified stable, flexible, and target attributes of the DataFrame.
