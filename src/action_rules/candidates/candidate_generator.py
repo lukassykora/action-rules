@@ -327,8 +327,11 @@ class CandidateGenerator:
                 if self.in_stop_list(new_ar_prefix, stop_list):
                     continue
 
-                undesired_support = undesired_frame[item].sum()
-                desired_support = desired_frame[item].sum()
+                # undesired_support = undesired_frame[item].sum()
+                # desired_support = desired_frame[item].sum()
+                undesired_support = self.get_support(undesired_frame, item)
+                desired_support = self.get_support(desired_frame, item)
+
 
                 if verbose:
                     print('SUPPORT - itemset, undesired state, desired state')
@@ -350,6 +353,8 @@ class CandidateGenerator:
                         }
                     )
 
+    def get_support(self, frame: Union['numpy.ndarray', 'cupy.ndarray'], item: int) -> int:
+        return frame[item].sum()
     def process_flexible_candidates(
         self,
         ar_prefix: tuple,
