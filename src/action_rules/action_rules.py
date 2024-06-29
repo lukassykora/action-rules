@@ -170,13 +170,14 @@ class ActionRules:
 
             is_gpu_pd = False
 
-        if use_numba_cuda:
+        numba_jit_available = False
+        numba_cuda_available = False
+        if use_numba:
             try:
                 from numba import jit
                 numba_jit_available = True
                 numba = jit(nopython=True)
             except ImportError:
-                numba_jit_available = False
                 numba = None
         elif use_numba_cuda:
             try:
@@ -184,11 +185,8 @@ class ActionRules:
                 numba_cuda_available = True
                 numba = cuda
             except ImportError:
-                numba_cuda_available = False
                 numba = None
         else:
-            numba_jit_available = False
-            numba_cuda_available = False
             numba = None
 
         self.np = np
