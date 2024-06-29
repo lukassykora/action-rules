@@ -2,6 +2,7 @@
 
 import copy
 from typing import TYPE_CHECKING, Union
+from numba import int64, uint8 # TODO
 
 from action_rules.rules import Rules
 
@@ -338,7 +339,6 @@ class CandidateGenerator:
                 undesired_support = self.get_support(undesired_frame, item)
                 desired_support = self.get_support(desired_frame, item)
 
-
                 if verbose:
                     print('SUPPORT - itemset, undesired state, desired state')
                     print(itemset_prefix + (item,))
@@ -361,9 +361,11 @@ class CandidateGenerator:
 
     def get_support(self, frame: Union['numpy.ndarray', 'cupy.ndarray'], item: int) -> int:
         if self.numba_jit_available:
-            @self.numba
-            def _get_support_numba(frame, item) -> int:
+            #from numba import int64, uint8#, njit
+            @self.numba(int64(uint8[:, :], int64))
+            def _get_support_numba(frame: Union['numpy.ndarray', 'cupy.ndarray'], item: int) -> int:
                 return frame[item].sum()
+
             return _get_support_numba(frame, item)
         return frame[item].sum()
 

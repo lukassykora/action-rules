@@ -174,9 +174,9 @@ class ActionRules:
         numba_cuda_available = False
         if use_numba:
             try:
-                from numba import jit
+                from numba import njit
                 numba_jit_available = True
-                numba = jit(nopython=True)
+                numba = njit
             except ImportError:
                 numba = None
         elif use_numba_cuda:
