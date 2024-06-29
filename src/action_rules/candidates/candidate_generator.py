@@ -74,6 +74,9 @@ class CandidateGenerator:
         desired_state: int,
         rules: Rules,
         use_sparse_matrix: bool,
+        numba_jit_available: bool,
+        numba_cuda_available: bool,
+        numba,
     ):
         """
         Initialize the CandidateGenerator class with the specified parameters.
@@ -114,6 +117,9 @@ class CandidateGenerator:
         self.desired_state = desired_state
         self.rules = rules
         self.use_sparse_matrix = use_sparse_matrix
+        self.numba_jit_available = numba_jit_available
+        self.numba_cuda_available = numba_cuda_available
+        self.numba = numba
 
     def generate_candidates(
         self,
@@ -354,7 +360,13 @@ class CandidateGenerator:
                     )
 
     def get_support(self, frame: Union['numpy.ndarray', 'cupy.ndarray'], item: int) -> int:
+        if self.numba_jit_available:
+            @self.numba
+            def _get_support_numba(frame, item) -> int:
+                return frame[item].sum()
+            return _get_support_numba(frame, item)
         return frame[item].sum()
+
     def process_flexible_candidates(
         self,
         ar_prefix: tuple,
