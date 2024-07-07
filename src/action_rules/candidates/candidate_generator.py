@@ -240,6 +240,15 @@ class CandidateGenerator:
         if undesired_mask is None:
             return self.frames[undesired_state], self.frames[desired_state]
         else:
+            if self.numba_jit_available:
+                # from numba import int64, uint8#, njit
+                @self.numba(int64(uint8[:, :], int64))
+                def _get_frames_numba(frame: Union['numpy.ndarray', 'cupy.ndarray'], item: int) -> int:
+                    undesired_frame = self.frames[undesired_state] * undesired_mask
+                    desired_frame = self.frames[desired_state] * desired_mask
+                    return undesired_frame, desired_frame
+
+                return _get_frames_numba(frame, item)
             if self.use_sparse_matrix:
                 if undesired_mask.getnnz() > 0:
                     undesired_frame = self.frames[undesired_state].multiply(undesired_mask)
