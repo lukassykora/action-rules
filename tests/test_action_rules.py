@@ -211,15 +211,12 @@ def test_get_split_tables(action_rules):
     -------
     Asserts that the dataset is correctly split into tables based on target item bindings.
     """
-    data = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-    target_items_binding = {'target': [0, 1, 0]}
+    data = np.array([[1, 0, 0], [1, 0, 0], [0, 1, 0], [1, 0, 1]])
+    target_items_binding = {'target': [2, 3]}
     target = 'target'
     split_tables = action_rules.get_split_tables(data, target_items_binding, target)
-    print(data)
-    print(split_tables[0])
-    print(split_tables[1])
-    np.testing.assert_array_equal(split_tables[0], data[:, [0, 2]])
-    np.testing.assert_array_equal(split_tables[1], data[:, 1])
+    np.testing.assert_array_equal(split_tables[2], data[:, [1]])
+    np.testing.assert_array_equal(split_tables[3], data[:, [0, 2]])
 
 
 def test_fit(action_rules):

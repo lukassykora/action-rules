@@ -9,7 +9,9 @@ from action_rules.rules.rules import Rules
 @pytest.fixture
 def rules():
     """Fixture for Rules instance."""
-    return Rules('status_<item_target>_default', 'status_<item_target>_paid')
+    return Rules(
+        'status_<item_target>_default', 'status_<item_target>_paid', ['age_<item_stable>_30', 'age_<item_stable>_40']
+    )
 
 
 def test_add_classification_rules(rules):
