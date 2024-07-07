@@ -98,9 +98,6 @@ class ActionRules:
         self.pd = None
         self.is_gpu_np = False
         self.is_gpu_pd = False
-        self.numba = None
-        self.numba_cuda_available = None
-        self.numba_jit_available = None
 
     def count_max_nodes(self, stable_items_binding: dict, flexible_items_binding: dict) -> int:
         values_in_attribute = []
@@ -113,8 +110,7 @@ class ActionRules:
                 sum_nodes += numpy.prod(comb)
         return sum_nodes
 
-    def set_array_library(self, use_gpu: bool, df: ['cudf.DataFrame', 'pandas.DataFrame'], use_numba: bool,
-                          use_numba_cuda: bool):
+    def set_array_library(self, use_gpu: bool, df: ['cudf.DataFrame', 'pandas.DataFrame']):
         """
         Return the appropriate DataFrame library (cuDF or pandas) based on the user's preference and availability.
 
@@ -169,33 +165,10 @@ class ActionRules:
             import pandas as pd
 
             is_gpu_pd = False
-
-        numba_jit_available = False
-        numba_cuda_available = False
-        if use_numba:
-            try:
-                from numba import njit
-                numba_jit_available = True
-                numba = njit
-            except ImportError:
-                numba = None
-        elif use_numba_cuda:
-            try:
-                from numba import cuda
-                numba_cuda_available = True
-                numba = cuda
-            except ImportError:
-                numba = None
-        else:
-            numba = None
-
         self.np = np
         self.pd = pd
         self.is_gpu_np = is_gpu_np
         self.is_gpu_pd = is_gpu_pd
-        self.numba_jit_available = numba_jit_available
-        self.numba_cuda_available = numba_cuda_available
-        self.numba = numba
 
     def df_to_array(
         self, df: Union['cudf.DataFrame', 'pandas.DataFrame'], use_gpu: bool = False, use_sparse_matrix: bool = False
@@ -309,8 +282,6 @@ class ActionRules:
         target_desired_state: str,
         use_sparse_matrix: bool = False,
         use_gpu: bool = False,
-        use_numba: bool = False,
-        use_numba_cuda: bool = False,
     ):
         """
         Generate action rules based on the provided dataset and parameters.
@@ -334,7 +305,7 @@ class ActionRules:
         use_sparse_matrix : bool, optional
             If True, rhe sparse matrix is used. Default is False.
         """
-        self.set_array_library(use_gpu, data, use_numba, use_numba_cuda)
+        self.set_array_library(use_gpu, data)
         data = self.one_hot_encode(data, stable_attributes, flexible_attributes, target)
         data, columns = self.df_to_array(data, use_gpu, use_sparse_matrix)
 
@@ -373,9 +344,6 @@ class ActionRules:
             desired_state,
             self.rules,
             use_sparse_matrix,
-            self.numba_jit_available,
-            self.numba_cuda_available,
-            self.numba,
         )
         while len(candidates_queue) > 0:
             candidate = candidates_queue.pop(0)

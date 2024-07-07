@@ -2,7 +2,6 @@
 
 import copy
 from typing import TYPE_CHECKING, Union
-from numba import int64, uint8 # TODO
 
 from action_rules.rules import Rules
 
@@ -75,9 +74,6 @@ class CandidateGenerator:
         desired_state: int,
         rules: Rules,
         use_sparse_matrix: bool,
-        numba_jit_available: bool,
-        numba_cuda_available: bool,
-        numba,
     ):
         """
         Initialize the CandidateGenerator class with the specified parameters.
@@ -118,9 +114,6 @@ class CandidateGenerator:
         self.desired_state = desired_state
         self.rules = rules
         self.use_sparse_matrix = use_sparse_matrix
-        self.numba_jit_available = numba_jit_available
-        self.numba_cuda_available = numba_cuda_available
-        self.numba = numba
 
     def generate_candidates(
         self,
@@ -240,15 +233,6 @@ class CandidateGenerator:
         if undesired_mask is None:
             return self.frames[undesired_state], self.frames[desired_state]
         else:
-            if self.numba_jit_available:
-                # from numba import int64, uint8#, njit
-                @self.numba(int64(uint8[:, :], int64))
-                def _get_frames_numba(frame: Union['numpy.ndarray', 'cupy.ndarray'], item: int) -> int:
-                    undesired_frame = self.frames[undesired_state] * undesired_mask
-                    desired_frame = self.frames[desired_state] * desired_mask
-                    return undesired_frame, desired_frame
-
-                return _get_frames_numba(frame, item)
             if self.use_sparse_matrix:
                 if undesired_mask.getnnz() > 0:
                     undesired_frame = self.frames[undesired_state].multiply(undesired_mask)
@@ -369,13 +353,6 @@ class CandidateGenerator:
                     )
 
     def get_support(self, frame: Union['numpy.ndarray', 'cupy.ndarray'], item: int) -> int:
-        if self.numba_jit_available:
-            #from numba import int64, uint8#, njit
-            @self.numba(int64(uint8[:, :], int64))
-            def _get_support_numba(frame: Union['numpy.ndarray', 'cupy.ndarray'], item: int) -> int:
-                return frame[item].sum()
-
-            return _get_support_numba(frame, item)
         return frame[item].sum()
 
     def process_flexible_candidates(
