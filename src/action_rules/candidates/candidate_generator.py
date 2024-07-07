@@ -7,7 +7,9 @@ from action_rules.rules import Rules
 
 if TYPE_CHECKING:
     import cupy
+    import cupyx
     import numpy
+    import scipy
 
 
 class CandidateGenerator:
@@ -206,8 +208,12 @@ class CandidateGenerator:
 
     def get_frames(
         self,
-        undesired_mask: Union['numpy.ndarray', 'cupy.ndarray', None],
-        desired_mask: Union['numpy.ndarray', 'cupy.ndarray', None],
+        undesired_mask: Union[
+            'numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix', 'scipy.sparse.csr_matrix', None
+        ],
+        desired_mask: Union[
+            'numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix', 'scipy.sparse.csr_matrix', None
+        ],
         undesired_state: int,
         desired_state: int,
     ) -> tuple:
@@ -216,9 +222,11 @@ class CandidateGenerator:
 
         Parameters
         ----------
-        undesired_mask : Union['numpy.ndarray', 'cupy.ndarray', None]
+        undesired_mask : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix',
+        'scipy.sparse.csr_matrix', None]
             Mask for the undesired state.
-        desired_mask : Union['numpy.ndarray', 'cupy.ndarray', None]
+        desired_mask : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix',
+        'scipy.sparse.csr_matrix', None]
             Mask for the desired state.
         undesired_state : int
             The undesired state of the target attribute.
@@ -234,11 +242,11 @@ class CandidateGenerator:
             return self.frames[undesired_state], self.frames[desired_state]
         else:
             if self.use_sparse_matrix:
-                if undesired_mask.getnnz() > 0:
+                if undesired_mask.getnnz() > 0:  # type: ignore
                     undesired_frame = self.frames[undesired_state].multiply(undesired_mask)
                 else:
                     undesired_frame = self.frames[undesired_state] * 0
-                if desired_mask.getnnz() > 0:
+                if desired_mask.getnnz() > 0:  # type: ignore
                     desired_frame = self.frames[desired_state].multiply(desired_mask)
                 else:
                     desired_frame = self.frames[desired_state] * 0
@@ -292,8 +300,12 @@ class CandidateGenerator:
         reduced_stable_items_binding: dict,
         stop_list: list,
         stable_candidates: dict,
-        undesired_frame: Union['numpy.ndarray', 'cupy.ndarray'],
-        desired_frame: Union['numpy.ndarray', 'cupy.ndarray'],
+        undesired_frame: Union[
+            'numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix', 'scipy.sparse.csr_matrix'
+        ],
+        desired_frame: Union[
+            'numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix', 'scipy.sparse.csr_matrix'
+        ],
         new_branches: list,
         verbose: bool,
     ):
@@ -312,9 +324,11 @@ class CandidateGenerator:
             List of stop combinations.
         stable_candidates : dict
             Dictionary containing stable candidates.
-        undesired_frame : Union['numpy.ndarray', 'cupy.ndarray']
+        undesired_frame : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix',
+        'scipy.sparse.csr_matrix']
             Data frame for the undesired state.
-        desired_frame : Union['numpy.ndarray', 'cupy.ndarray']
+        desired_frame : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix',
+        'scipy.sparse.csr_matrix']
             Data frame for the desired state.
         new_branches : list
             List of new branches generated.
@@ -352,7 +366,34 @@ class CandidateGenerator:
                         }
                     )
 
-    def get_support(self, frame: Union['numpy.ndarray', 'cupy.ndarray'], item: int) -> int:
+    def get_support(
+        self,
+        frame: Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix', 'scipy.sparse.csr_matrix'],
+        item: int,
+    ) -> int:
+        """
+        Calculate the sum of elements in a specified row of the given frame.
+
+        This function takes a 2D array (`frame`) and an integer (`item`) representing
+        the index of a row. It returns the sum of all elements in that row.
+
+        Parameters
+        ----------
+        frame : Union[numpy.ndarray, cupy.ndarray, 'cupyx.scipy.sparse.csr_matrix', 'scipy.sparse.csr_matrix']
+            A 2D array from which the row is selected. The array can be a NumPy or CuPy array.
+        item : int
+            The index of the row to be summed.
+
+        Returns
+        -------
+        int
+            The sum of all elements in the specified row of the frame.
+
+        Notes
+        -----
+        - This function is compatible with both NumPy and CuPy arrays.
+        - Ensure that the `item` index is within the bounds of the frame's rows.
+        """
         return frame[item].sum()
 
     def process_flexible_candidates(
@@ -363,8 +404,12 @@ class CandidateGenerator:
         stop_list: list,
         stop_list_itemset: list,
         flexible_candidates: dict,
-        undesired_frame: Union['numpy.ndarray', 'cupy.ndarray'],
-        desired_frame: Union['numpy.ndarray', 'cupy.ndarray'],
+        undesired_frame: Union[
+            'numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix', 'scipy.sparse.csr_matrix'
+        ],
+        desired_frame: Union[
+            'numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix', 'scipy.sparse.csr_matrix'
+        ],
         actionable_attributes: int,
         new_branches: list,
         verbose: bool,
@@ -386,9 +431,11 @@ class CandidateGenerator:
             List of stop itemsets.
         flexible_candidates : dict
             Dictionary containing flexible candidates.
-        undesired_frame : Union['numpy.ndarray', 'cupy.ndarray']
+        undesired_frame : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix',
+        'scipy.sparse.csr_matrix']
             Data frame for the undesired state.
-        desired_frame : Union['numpy.ndarray', 'cupy.ndarray']
+        desired_frame : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix',
+        'scipy.sparse.csr_matrix']
             Data frame for the desired state.
         actionable_attributes : int
             Number of actionable attributes.
@@ -444,8 +491,12 @@ class CandidateGenerator:
         itemset_prefix: tuple,
         new_ar_prefix: tuple,
         stop_list_itemset: list,
-        undesired_frame: Union['numpy.ndarray', 'cupy.ndarray'],
-        desired_frame: Union['numpy.ndarray', 'cupy.ndarray'],
+        undesired_frame: Union[
+            'numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix', 'scipy.sparse.csr_matrix'
+        ],
+        desired_frame: Union[
+            'numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix', 'scipy.sparse.csr_matrix'
+        ],
         flexible_candidates: dict,
         verbose: bool,
     ):
@@ -464,9 +515,11 @@ class CandidateGenerator:
             Prefix for stop list.
         stop_list_itemset : list
             List of stop itemsets.
-        undesired_frame : Union['numpy.ndarray', 'cupy.ndarray']
+        undesired_frame : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix',
+        'scipy.sparse.csr_matrix']
             Data frame for the undesired state.
-        desired_frame : Union['numpy.ndarray', 'cupy.ndarray']
+        desired_frame : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix',
+        'scipy.sparse.csr_matrix']
             Data frame for the desired state.
         flexible_candidates : dict
             Dictionary containing flexible candidates.

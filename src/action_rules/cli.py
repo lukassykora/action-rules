@@ -4,6 +4,7 @@ import os
 from typing import BinaryIO
 
 import click
+import pandas as pd
 
 from action_rules import ActionRules
 
@@ -168,7 +169,6 @@ def main(
         int(min_desired_support),
         float(min_desired_confidence),
     )
-    pd = action_rules.get_dataframe_library(use_gpu)
     data = pd.read_csv(os.path.abspath(csv_path.name))
     action_rules.fit(
         data,

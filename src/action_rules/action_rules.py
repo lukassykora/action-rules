@@ -10,10 +10,14 @@ from .output.output import Output
 from .rules.rules import Rules
 
 if TYPE_CHECKING:
+    from types import ModuleType  # noqa
+
     import cudf
     import cupy
+    import cupyx
     import numpy
     import pandas
+    import scipy
 
 
 class ActionRules:
@@ -94,12 +98,36 @@ class ActionRules:
         self.verbose = verbose
         self.rules = None  # type: Optional[Rules]
         self.output = None  # type: Optional[Output]
-        self.np = None
-        self.pd = None
+        self.np = None  # type: Optional[ModuleType]
+        self.pd = None  # type: Optional[ModuleType]
         self.is_gpu_np = False
         self.is_gpu_pd = False
 
     def count_max_nodes(self, stable_items_binding: dict, flexible_items_binding: dict) -> int:
+        """
+        Calculate the maximum number of nodes based on the given item bindings.
+
+        This function takes two dictionaries, `stable_items_binding` and `flexible_items_binding`,
+        which map attributes to lists of items. It calculates the total number of nodes by considering
+        all possible combinations of the lengths of these item lists and summing the product of each combination.
+
+        Parameters
+        ----------
+        stable_items_binding : dict
+            A dictionary where keys are attributes and values are lists of stable items.
+        flexible_items_binding : dict
+            A dictionary where keys are attributes and values are lists of flexible items.
+
+        Returns
+        -------
+        int
+            The total number of nodes calculated by summing the product of lengths of all combinations of item lists.
+
+        Notes
+        -----
+        - The function first combines the lengths of item lists from both dictionaries.
+        - It then calculates the sum of the products of all possible combinations of these lengths.
+        """
         values_in_attribute = []
         for items in list(stable_items_binding.values()) + list(flexible_items_binding.values()):
             values_in_attribute.append(len(items))
@@ -107,10 +135,10 @@ class ActionRules:
         sum_nodes = 0
         for i in range(len(values_in_attribute)):
             for comb in itertools.combinations(values_in_attribute, i + 1):
-                sum_nodes += numpy.prod(comb)
+                sum_nodes += int(numpy.prod(comb))
         return sum_nodes
 
-    def set_array_library(self, use_gpu: bool, df: ['cudf.DataFrame', 'pandas.DataFrame']):
+    def set_array_library(self, use_gpu: bool, df: Union['cudf.DataFrame', 'pandas.DataFrame']):
         """
         Return the appropriate DataFrame library (cuDF or pandas) based on the user's preference and availability.
 
@@ -203,7 +231,7 @@ class ActionRules:
 
                 data = csr_matrix(df.as_gpu_matrix()).T
             else:
-                data = self.np.asarray(df.as_gpu_matrix(), dtype=self.np.uint8).T
+                data = self.np.asarray(df.as_gpu_matrix(), dtype=self.np.uint8).T  # type: ignore
         # Pandas and CuPy
         elif self.is_gpu_np and not self.is_gpu_pd:
             if use_sparse_matrix:
@@ -214,7 +242,7 @@ class ActionRules:
 
                 data = csc_matrix(scipy_matrix, dtype=float).T
             else:
-                data = self.np.asarray(df.values, dtype=self.np.uint8).T
+                data = self.np.asarray(df.values, dtype=self.np.uint8).T  # type: ignore
         # cuDF and Numpy
         elif not self.is_gpu_np and self.is_gpu_pd:
             if use_sparse_matrix:
@@ -222,7 +250,7 @@ class ActionRules:
 
                 data = csr_matrix(df.as_gpu_matrix()).T
             else:
-                data = self.np.asarray(df.as_gpu_matrix(), dtype=self.np.uint8).T
+                data = self.np.asarray(df.as_gpu_matrix(), dtype=self.np.uint8).T  # type: ignore
         # Pandas and Numpy
         else:
             if use_sparse_matrix:
@@ -230,7 +258,7 @@ class ActionRules:
 
                 data = csr_matrix(df.values).T
             else:
-                data = df.to_numpy(dtype=self.np.uint8).T
+                data = df.to_numpy(dtype=self.np.uint8).T  # type: ignore
         return data, columns
 
     def one_hot_encode(
@@ -266,10 +294,14 @@ class ActionRules:
         single DataFrame.
         """
         data = data.astype(str)
-        data_stable = self.pd.get_dummies(data[stable_attributes], sparse=False, prefix_sep='_<item_stable>_')
-        data_flexible = self.pd.get_dummies(data[flexible_attributes], sparse=False, prefix_sep='_<item_flexible>_')
-        data_target = self.pd.get_dummies(data[[target]], sparse=False, prefix_sep='_<item_target>_')
-        data = self.pd.concat([data_stable, data_flexible, data_target], axis=1)
+        data_stable = self.pd.get_dummies(  # type: ignore
+            data[stable_attributes], sparse=False, prefix_sep='_<item_stable>_'
+        )
+        data_flexible = self.pd.get_dummies(  # type: ignore
+            data[flexible_attributes], sparse=False, prefix_sep='_<item_flexible>_'
+        )
+        data_target = self.pd.get_dummies(data[[target]], sparse=False, prefix_sep='_<item_target>_')  # type: ignore
+        data = self.pd.concat([data_stable, data_flexible, data_target], axis=1)  # type: ignore
         return data
 
     def fit(
@@ -442,7 +474,7 @@ class ActionRules:
 
     def get_split_tables(
         self,
-        data: Union['numpy.ndarray', 'cupy.ndarray'],
+        data: Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix', 'scipy.sparse.csr_matrix'],
         target_items_binding: dict,
         target: str,
         use_gpu: bool = False,
@@ -453,7 +485,7 @@ class ActionRules:
 
         Parameters
         ----------
-        data : Union[numpy.ndarray, cupy.ndarray]
+        data : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix', 'scipy.sparse.csr_matrix']
             The dataset to be split.
         target_items_binding : dict
             Dictionary containing bindings for target items.
@@ -473,7 +505,7 @@ class ActionRules:
         for item in target_items_binding[target]:
             mask = data[item] == 1
             if use_sparse_matrix:
-                frames[item] = data.multiply(mask)
+                frames[item] = data.multiply(mask)  # type: ignore
             else:
                 frames[item] = data[:, mask]
         return frames
