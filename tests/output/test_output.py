@@ -1,55 +1,157 @@
 #!/usr/bin/env python
 """Tests for `action_rules` package."""
 
+import json
+
 import pytest
 
-from action_rules.output.output import Output
+from action_rules.output import Output
 
 
 @pytest.fixture
-def sample_action_rules():
-    """Fixture for sample action rules to be used in tests."""
-    return [
+def output_instance():
+    """
+    Fixture to initialize an Output object with preset action rules.
+
+    Returns
+    -------
+    Output
+        An instance of the Output class.
+    """
+    action_rules = [
         {
             'undesired': {
-                'itemset': ['age_<item_stable>_30', 'income_<item_flexible>_low'],
+                'itemset': ['attr1_<item_stable>_val1', 'attr2_<item_flexible>_undesired_val2'],
                 'support': 10,
                 'confidence': 0.8,
-                'target': 'status_<item_target>_default',
+                'target': 'target_<item_target>_undesired',
             },
             'desired': {
-                'itemset': ['age_<item_stable>_30', 'income_<item_flexible>_medium'],
-                'support': 5,
-                'confidence': 0.6,
-                'target': 'status_<item_target>_paid',
+                'itemset': ['attr1_<item_stable>_val1', 'attr2_<item_flexible>_desired_val2'],
+                'support': 15,
+                'confidence': 0.9,
+                'target': 'target_<item_target>_desired',
             },
-            'uplift': 0.2,
+            'uplift': 1.5,
+        }
+    ]
+    return Output(action_rules, 'target')
+
+
+def test_init(output_instance):
+    """
+    Test the initialization of the Output class.
+
+    Parameters
+    ----------
+    output_instance : Output
+        The Output instance to test.
+
+    Asserts
+    -------
+    Asserts that the initialization parameters are correctly set.
+    """
+    assert output_instance.action_rules == [
+        {
+            'undesired': {
+                'itemset': ['attr1_<item_stable>_val1', 'attr2_<item_flexible>_undesired_val2'],
+                'support': 10,
+                'confidence': 0.8,
+                'target': 'target_<item_target>_undesired',
+            },
+            'desired': {
+                'itemset': ['attr1_<item_stable>_val1', 'attr2_<item_flexible>_desired_val2'],
+                'support': 15,
+                'confidence': 0.9,
+                'target': 'target_<item_target>_desired',
+            },
+            'uplift': 1.5,
+        }
+    ]
+    assert output_instance.target == 'target'
+
+
+def test_get_ar_notation(output_instance):
+    """
+    Test the get_ar_notation method.
+
+    Parameters
+    ----------
+    output_instance : Output
+        The Output instance to test.
+
+    Asserts
+    -------
+    Asserts that the action rules are correctly represented in a human-readable format.
+    """
+    ar_notation = output_instance.get_ar_notation()
+    assert ar_notation == [
+        {
+            'undesired': {
+                'itemset': ['attr1_<item_stable>_val1', 'attr2_<item_flexible>_undesired_val2'],
+                'support': 10,
+                'confidence': 0.8,
+                'target': 'target_<item_target>_undesired',
+            },
+            'desired': {
+                'itemset': ['attr1_<item_stable>_val1', 'attr2_<item_flexible>_desired_val2'],
+                'support': 15,
+                'confidence': 0.9,
+                'target': 'target_<item_target>_desired',
+            },
+            'uplift': 1.5,
         }
     ]
 
 
-@pytest.fixture
-def output(sample_action_rules):
-    """Fixture for Output instance."""
-    return Output(sample_action_rules, 'status')
+def test_get_export_notation(output_instance):
+    """
+    Test the get_export_notation method.
+
+    Parameters
+    ----------
+    output_instance : Output
+        The Output instance to test.
+
+    Asserts
+    -------
+    Asserts that the action rules are correctly represented for export.
+    """
+    export_notation = output_instance.get_export_notation()
+    expected = json.dumps(
+        [
+            {
+                'stable': [{'attribute': 'attr1', 'value': 'val1'}],
+                'flexible': [{'attribute': 'attr2', 'undesired': 'undesired_val2', 'desired': 'desired_val2'}],
+                'target': {'attribute': 'target', 'undesired': 'undesired', 'desired': 'desired'},
+                'support of undesired part': 10,
+                'confidence of undesired part': 0.8,
+                'support of desired part': 15,
+                'confidence of desired part': 0.9,
+                'uplift': 1.5,
+            }
+        ]
+    )
+    assert export_notation == expected
 
 
-def test_get_ar_notation(output):
-    """Test the get_ar_notation method of Output."""
-    ar_notation = output.get_ar_notation()
-    assert len(ar_notation) > 0
-    assert 'age: 30' in ar_notation[0]
+def test_get_pretty_ar_notation(output_instance):
+    """
+    Test the get_pretty_ar_notation method.
 
+    Parameters
+    ----------
+    output_instance : Output
+        The Output instance to test.
 
-def test_get_export_notation(output):
-    """Test the get_export_notation method of Output."""
-    export_notation = output.get_export_notation()
-    assert len(export_notation) > 0
-    assert '"attribute": "age"' in export_notation
-
-
-def test_get_pretty_ar_notation(output):
-    """Test the get_pretty_ar_notation method of Output."""
-    pretty_ar_notation = output.get_pretty_ar_notation()
-    assert len(pretty_ar_notation) > 0
-    assert "If attribute 'age' is '30'" in pretty_ar_notation[0]
+    Asserts
+    -------
+    Asserts that the action rules are correctly represented as text strings.
+    """
+    pretty_ar_notation = output_instance.get_pretty_ar_notation()
+    expected = [
+        "If attribute 'attr1' is 'val1', attribute 'attr2' value 'undesired_val2' is changed to 'desired_val2', then"
+        + " 'target' value 'target_<item_target>_undesired' is changed to 'target_<item_target>_desired with uplift:"
+        + " 1.5."
+    ]
+    assert pretty_ar_notation == expected

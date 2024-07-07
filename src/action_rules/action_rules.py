@@ -128,6 +128,8 @@ class ActionRules:
         - The function first combines the lengths of item lists from both dictionaries.
         - It then calculates the sum of the products of all possible combinations of these lengths.
         """
+        import numpy
+
         values_in_attribute = []
         for items in list(stable_items_binding.values()) + list(flexible_items_binding.values()):
             values_in_attribute.append(len(items))
