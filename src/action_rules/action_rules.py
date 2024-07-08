@@ -346,6 +346,10 @@ class ActionRules:
         stable_items_binding, flexible_items_binding, target_items_binding = self.get_bindings(
             columns, stable_attributes, flexible_attributes, target
         )
+        if self.verbose:
+            print('Maximum number of nodes to check for support:')
+            print('_____________________________________________')
+            print(self.count_max_nodes(stable_items_binding, flexible_items_binding))
         stop_list = self.get_stop_list(stable_items_binding, flexible_items_binding)
         frames = self.get_split_tables(data, target_items_binding, target, use_gpu, use_sparse_matrix)
         undesired_state = columns.index(target + '_<item_target>_' + str(target_undesired_state))

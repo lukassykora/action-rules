@@ -341,15 +341,15 @@ class CandidateGenerator:
                 if self.in_stop_list(new_ar_prefix, stop_list):
                     continue
 
-                # undesired_support = undesired_frame[item].sum()
-                # desired_support = desired_frame[item].sum()
                 undesired_support = self.get_support(undesired_frame, item)
                 desired_support = self.get_support(desired_frame, item)
 
                 if verbose:
-                    print('SUPPORT - itemset, undesired state, desired state')
-                    print(itemset_prefix + (item,))
-                    print((undesired_support, desired_support))
+                    print('SUPPORT for: ' + str(itemset_prefix + (item,)))
+                    print('_________________________________________________')
+                    print('- extended by stable attribute')
+                    print('undesired state support: ' + str(undesired_support))
+                    print('desired state support: ' + str(desired_support))
 
                 if undesired_support < self.min_undesired_support or desired_support < self.min_desired_support:
                     stable_candidates[attribute].remove(item)
@@ -544,9 +544,11 @@ class CandidateGenerator:
             desired_support = desired_frame[item].sum()
 
             if verbose:
-                print('SUPPORT - itemset, undesired state, desired state')
-                print(itemset_prefix + (item,))
-                print((undesired_support, desired_support))
+                print('SUPPORT for: ' + str(itemset_prefix + (item,)))
+                print('_________________________________________________')
+                print('- extended by flexible attribute')
+                print('undesired state support: ' + str(undesired_support))
+                print('desired state support: ' + str(desired_support))
 
             undesired_conf = self.rules.calculate_confidence(undesired_support, desired_support)
             if undesired_support >= self.min_undesired_support:
