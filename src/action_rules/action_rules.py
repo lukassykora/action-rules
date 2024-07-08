@@ -231,18 +231,19 @@ class ActionRules:
             if use_sparse_matrix:
                 from cupyx.scipy.sparse import csr_matrix
 
-                data = csr_matrix(df.as_gpu_matrix()).T
+                data = csr_matrix(df.values, dtype=self.np.float32).T
             else:
-                data = self.np.asarray(df.as_gpu_matrix(), dtype=self.np.uint8).T  # type: ignore
+                data = self.np.asarray(df.values, dtype=self.np.uint8).T  # type: ignore
         # Pandas and CuPy
         elif self.is_gpu_np and not self.is_gpu_pd:
             if use_sparse_matrix:
-                from scipy.sparse import csr_matrix as scipy_csr_matrix
+                # from scipy.sparse import csr_matrix as scipy_csr_matrix
 
-                scipy_matrix = scipy_csr_matrix(df.values)
-                from cupyx.scipy.sparse import csc_matrix
+                # scipy_matrix = scipy_csr_matrix(df.values)
+                from cupyx.scipy.sparse import csr_matrix
 
-                data = csc_matrix(scipy_matrix, dtype=float).T
+                # data = csc_matrix(scipy_matrix, dtype=float).T
+                data = csr_matrix(df.values, dtype=self.np.uint8).T
             else:
                 data = self.np.asarray(df.values, dtype=self.np.uint8).T  # type: ignore
         # cuDF and Numpy
@@ -250,15 +251,15 @@ class ActionRules:
             if use_sparse_matrix:
                 from scipy.sparse import csr_matrix
 
-                data = csr_matrix(df.as_gpu_matrix()).T
+                data = csr_matrix(df.to_numpy(), dtype=self.np.uint8).T
             else:
-                data = self.np.asarray(df.as_gpu_matrix(), dtype=self.np.uint8).T  # type: ignore
+                data = df.to_numpy().T  # type: ignore
         # Pandas and Numpy
         else:
             if use_sparse_matrix:
                 from scipy.sparse import csr_matrix
 
-                data = csr_matrix(df.values).T
+                data = csr_matrix(df.values, dtype=self.np.uint8).T
             else:
                 data = df.to_numpy(dtype=self.np.uint8).T  # type: ignore
         return data, columns
