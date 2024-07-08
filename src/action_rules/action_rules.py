@@ -239,8 +239,8 @@ class ActionRules:
             if use_sparse_matrix:
                 from scipy.sparse import csr_matrix as scipy_csr_matrix
                 from cupyx.scipy.sparse import csr_matrix
-                scipy_matrix = scipy_csr_matrix(df.values)
-                data = csc_matrix(scipy_matrix, dtype=float).T
+                scipy_matrix = scipy_csr_matrix(df.values).T
+                data = csr_matrix(scipy_matrix, dtype=float)
             else:
                 data = self.np.asarray(df.values, dtype=self.np.uint8).T  # type: ignore
         # cuDF and Numpy
