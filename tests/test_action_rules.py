@@ -167,12 +167,21 @@ def test_get_bindings(action_rules):
     stable_attributes = ['stable']
     flexible_attributes = ['flexible']
     target = 'target'
-    stable_items_binding, flexible_items_binding, target_items_binding = action_rules.get_bindings(
+    stable_items_binding, flexible_items_binding, target_items_binding, column_values = action_rules.get_bindings(
         columns, stable_attributes, flexible_attributes, target
     )
     assert stable_items_binding == {'stable': [0, 1]}
     assert flexible_items_binding == {'flexible': [2, 3, 4]}
     assert target_items_binding == {'target': [5, 6]}
+    assert column_values == {
+        0: ('stable', 'a'),
+        1: ('stable', 'b'),
+        2: ('flexible', 'x'),
+        3: ('flexible', 'y'),
+        4: ('flexible', 'z'),
+        5: ('target', 'yes'),
+        6: ('target', 'no'),
+    }
 
 
 def test_get_stop_list(action_rules):

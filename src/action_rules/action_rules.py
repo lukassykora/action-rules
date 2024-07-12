@@ -231,14 +231,15 @@ class ActionRules:
             if use_sparse_matrix:
                 from cupyx.scipy.sparse import csr_matrix
 
-                data = csr_matrix(df.values, dtype=self.np.float32).T
+                data = csr_matrix(df.values, dtype=self.np.float32).T  # type: ignore
             else:
                 data = self.np.asarray(df.values, dtype=self.np.uint8).T  # type: ignore
         # Pandas and CuPy
         elif self.is_gpu_np and not self.is_gpu_pd:
             if use_sparse_matrix:
-                from scipy.sparse import csr_matrix as scipy_csr_matrix
                 from cupyx.scipy.sparse import csr_matrix
+                from scipy.sparse import csr_matrix as scipy_csr_matrix
+
                 scipy_matrix = scipy_csr_matrix(df.values).T
                 data = csr_matrix(scipy_matrix, dtype=float)
             else:
@@ -248,7 +249,7 @@ class ActionRules:
             if use_sparse_matrix:
                 from scipy.sparse import csr_matrix
 
-                data = csr_matrix(df.to_numpy(), dtype=self.np.uint8).T
+                data = csr_matrix(df.to_numpy(), dtype=self.np.uint8).T  # type: ignore
             else:
                 data = df.to_numpy().T  # type: ignore
         # Pandas and Numpy
@@ -256,7 +257,7 @@ class ActionRules:
             if use_sparse_matrix:
                 from scipy.sparse import csr_matrix
 
-                data = csr_matrix(df.values, dtype=self.np.uint8).T
+                data = csr_matrix(df.values, dtype=self.np.uint8).T  # type: ignore
             else:
                 data = df.to_numpy(dtype=self.np.uint8).T  # type: ignore
         return data, columns
@@ -341,7 +342,7 @@ class ActionRules:
         data = self.one_hot_encode(data, stable_attributes, flexible_attributes, target)
         data, columns = self.df_to_array(data, use_gpu, use_sparse_matrix)
 
-        stable_items_binding, flexible_items_binding, target_items_binding = self.get_bindings(
+        stable_items_binding, flexible_items_binding, target_items_binding, column_values = self.get_bindings(
             columns, stable_attributes, flexible_attributes, target
         )
         if self.verbose:
@@ -396,7 +397,9 @@ class ActionRules:
             )
             candidates_queue += new_candidates
         self.rules.generate_action_rules()
-        self.output = Output(self.rules.action_rules, target)
+        self.output = Output(
+            self.rules.action_rules, target, stable_items_binding, flexible_items_binding, column_values
+        )
         del data
 
     def get_bindings(
@@ -428,6 +431,7 @@ class ActionRules:
         stable_items_binding = defaultdict(lambda: [])
         flexible_items_binding = defaultdict(lambda: [])
         target_items_binding = defaultdict(lambda: [])
+        column_values = {}
 
         for i, col in enumerate(columns):
             is_continue = False
@@ -435,6 +439,7 @@ class ActionRules:
             for attribute in stable_attributes:
                 if col.startswith(attribute + '_<item_stable>_'):
                     stable_items_binding[attribute].append(i)
+                    column_values[i] = (attribute, col.split('_<item_stable>_', 1)[1])
                     is_continue = True
                     break
             if is_continue is True:
@@ -443,6 +448,7 @@ class ActionRules:
             for attribute in flexible_attributes:
                 if col.startswith(attribute + '_<item_flexible>_'):
                     flexible_items_binding[attribute].append(i)
+                    column_values[i] = (attribute, col.split('_<item_flexible>_', 1)[1])
                     is_continue = True
                     break
             if is_continue is True:
@@ -450,7 +456,8 @@ class ActionRules:
             # target
             if col.startswith(target + '_<item_target>_'):
                 target_items_binding[target].append(i)
-        return stable_items_binding, flexible_items_binding, target_items_binding
+                column_values[i] = (target, col.split('_<item_target>_', 1)[1])
+        return stable_items_binding, flexible_items_binding, target_items_binding, column_values
 
     def get_stop_list(self, stable_items_binding: dict, flexible_items_binding: dict) -> list:
         """

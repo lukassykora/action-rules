@@ -24,7 +24,14 @@ class Output:
         Generate a list of text strings representing the action rules.
     """
 
-    def __init__(self, action_rules: list, target: str):
+    def __init__(
+        self,
+        action_rules: list,
+        target: str,
+        stable_items_binding: dict,
+        flexible_items_binding: dict,
+        column_values: dict,
+    ):
         """
         Initialize the Output class with the specified action rules and target attribute.
 
@@ -34,9 +41,18 @@ class Output:
             List containing the action rules.
         target : str
             The target attribute for the action rules.
+        stable_items_binding : dict
+            Dictionary containing bindings for stable items.
+        flexible_items_binding : dict
+            Dictionary containing bindings for flexible items.
+        column_values : dict
+            Dictionary the values of the columns.
         """
         self.action_rules = action_rules
         self.target = target
+        self.stable_cols = [item for sublist in stable_items_binding.values() for item in sublist]
+        self.flexible_cols = [item for sublist in flexible_items_binding.values() for item in sublist]
+        self.column_values = column_values
 
     def get_ar_notation(self):
         """
@@ -55,24 +71,24 @@ class Output:
                     rule += ' ∧ '
                 rule += '('
                 if item == action_rule['desired']['itemset'][i]:
-                    if '_<item_stable>_' in item:
-                        val = item.split('_<item_stable>_')
+                    if item in self.stable_cols:
+                        val = self.column_values[item]
                         rule += str(val[0]) + ': ' + str(val[1])
                     else:
-                        val = item.split('_<item_flexible>_')
+                        val = self.column_values[item]
                         rule += str(val[0]) + '*: ' + str(val[1])
                 else:
-                    val = item.split('_<item_flexible>_')
-                    val_desired = action_rule['desired']['itemset'][i].split('_<item_flexible>_')
+                    val = self.column_values[item]
+                    val_desired = self.column_values[action_rule['desired']['itemset'][i]]
                     rule += str(val[0]) + ': ' + str(val[1]) + ' → ' + str(val_desired[1])
                 rule += ')'
             rule += (
                 '] ⇒ ['
                 + str(self.target)
                 + ': '
-                + str(action_rule['undesired']['target'])
+                + str(self.column_values[action_rule['undesired']['target']][1])
                 + ' → '
-                + str(action_rule['desired']['target'])
+                + str(self.column_values[action_rule['desired']['target']][1])
                 + ']'
             )
             rule += (
@@ -105,20 +121,20 @@ class Output:
             rule = {'stable': [], 'flexible': []}
             for i, item in enumerate(ar_dict['undesired']['itemset']):
                 if item == ar_dict['desired']['itemset'][i]:
-                    if '_<item_stable>_' in item:
-                        val = item.split('_<item_stable>_')
+                    if item in self.stable_cols:
+                        val = self.column_values[item]
                         rule['stable'].append({'attribute': val[0], 'value': val[1]})
                     else:
-                        val = item.split('_<item_flexible>_')
+                        val = self.column_values[item]
                         rule['stable'].append({'attribute': val[0], 'value': val[1], 'flexible_as_stable': True})
                 else:
-                    val = item.split('_<item_flexible>_')
-                    val_desired = ar_dict['desired']['itemset'][i].split('_<item_flexible>_')
+                    val = self.column_values[item]
+                    val_desired = self.column_values[ar_dict['desired']['itemset'][i]]
                     rule['flexible'].append({'attribute': val[0], 'undesired': val[1], 'desired': val_desired[1]})
             rule['target'] = {
                 'attribute': self.target,
-                'undesired': ar_dict['undesired']['target'].split('_<item_target>_')[1],
-                'desired': ar_dict['desired']['target'].split('_<item_target>_')[1],
+                'undesired': str(self.column_values[ar_dict['undesired']['target']][1]),
+                'desired': str(self.column_values[ar_dict['desired']['target']][1]),
             }
             rule['support of undesired part'] = int(ar_dict['undesired']['support'])
             rule['confidence of undesired part'] = float(ar_dict['undesired']['confidence'])
@@ -142,23 +158,23 @@ class Output:
             text = "If "
             for i, item in enumerate(ar_dict['undesired']['itemset']):
                 if item == ar_dict['desired']['itemset'][i]:
-                    if '_<item_stable>_' in item:
-                        val = item.split('_<item_stable>_')
+                    if item in self.stable_cols:
+                        val = self.column_values[item]
                         text += "attribute '" + val[0] + "' is '" + val[1] + "', "
                     else:
-                        val = item.split('_<item_flexible>_')
+                        val = self.column_values[item]
                         text += "attribute (flexible is used as stable) '" + val[0] + "' is '" + val[1] + "', "
                 else:
-                    val = item.split('_<item_flexible>_')
-                    val_desired = ar_dict['desired']['itemset'][i].split('_<item_flexible>_')
+                    val = self.column_values[item]
+                    val_desired = self.column_values[ar_dict['desired']['itemset'][i]]
                     text += "attribute '" + val[0] + "' value '" + val[1] + "' is changed to '" + val_desired[1] + "', "
             text += (
                 "then '"
                 + self.target
                 + "' value '"
-                + ar_dict['undesired']['target']
+                + self.column_values[ar_dict['undesired']['target']][1]
                 + "' is changed to '"
-                + ar_dict['desired']['target']
+                + self.column_values[ar_dict['desired']['target']][1]
                 + " with uplift: "
                 + str(ar_dict['uplift'])
                 + "."
