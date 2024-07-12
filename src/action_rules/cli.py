@@ -94,6 +94,13 @@ from action_rules import ActionRules
     help='Action Rules (JSON representation).',
     default='rules.json',
 )
+@click.option(
+    '--use_gpu',
+    type=bool,
+    prompt='GPU acceleration',
+    help='Use GPU (cuDF) for data processing if available.',
+    default=False,
+)
 def main(
     min_stable_attributes: int,
     min_flexible_attributes: int,
@@ -108,6 +115,7 @@ def main(
     undesired_state: str,
     desired_state: str,
     output_json_path: BinaryIO,
+    use_gpu: bool,
 ):
     """
     CLI.
@@ -143,6 +151,8 @@ def main(
         The desired state of the target attribute.
     output_json_path : BinaryIO
         Path to the output JSON file where the results will be saved.
+    use_gpu : bool
+        Use GPU (cuDF) for data processing if available.
 
     Returns
     -------
@@ -167,6 +177,7 @@ def main(
         str(target),
         str(undesired_state),
         str(desired_state),
+        use_gpu,
     )
     rules = action_rules.get_rules()
     if rules is not None:

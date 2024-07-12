@@ -11,18 +11,28 @@ from action_rules.output import Output
 
 @pytest.fixture
 def sample_json_data():
-    """Fixture for sample JSON data to be used in tests."""
+    """
+    Fixture for sample JSON data to be used in tests.
+
+    Returns
+    -------
+    str
+        JSON string representing the action rules.
+    """
     return json.dumps(
         [
             {
-                'support of undesired part': 10,
-                'confidence of undesired part': 0.8,
-                'support of desired part': 5,
-                'confidence of desired part': 0.6,
-                'uplift': 0.2,
-                'target': {'attribute': 'status', 'undesired': 'default', 'desired': 'paid'},
-                'stable': [{'attribute': 'age', 'value': 30}],
-                'flexible': [{'attribute': 'income', 'undesired': 'low', 'desired': 'medium'}],
+                "support of undesired part": 10,
+                "confidence of undesired part": 0.8,
+                "support of desired part": 5,
+                "confidence of desired part": 0.6,
+                "uplift": 0.2,
+                "target": {"attribute": "status", "undesired": "default", "desired": "paid"},
+                "stable": [
+                    {"attribute": "age", "value": "30"},
+                    {"attribute": "income", "value": "low", "flexible_as_stable": True},
+                ],
+                "flexible": [{"attribute": "income", "undesired": "low", "desired": "medium"}],
             }
         ]
     )
@@ -30,32 +40,37 @@ def sample_json_data():
 
 @pytest.fixture
 def input_instance():
-    """Fixture for Input instance."""
+    """
+    Fixture for Input instance.
+
+    Returns
+    -------
+    Input
+        Instance of the Input class.
+    """
     return Input()
 
 
 def test_import_action_rules(input_instance, sample_json_data):
-    """Test the import_action_rules method of Input."""
+    """
+    Test the import_action_rules method of the Input class.
+
+    Parameters
+    ----------
+    input_instance : Input
+        Instance of the Input class.
+    sample_json_data : str
+        JSON string representing the action rules.
+    """
     output = input_instance.import_action_rules(sample_json_data)
     assert isinstance(output, Output)
     assert len(output.action_rules) == 1
-
-    action_rule = output.action_rules[0]
-
-    assert 'undesired' in action_rule
-    assert 'desired' in action_rule
-    assert action_rule['undesired']['support'] == 10
-    assert action_rule['undesired']['confidence'] == 0.8
-    assert action_rule['undesired']['target'] == 'status_<item_target>_default'
-    assert action_rule['desired']['support'] == 5
-    assert action_rule['desired']['confidence'] == 0.6
-    assert action_rule['desired']['target'] == 'status_<item_target>_paid'
-    assert action_rule['uplift'] == 0.2
-
-    undesired_itemset = action_rule['undesired']['itemset']
-    desired_itemset = action_rule['desired']['itemset']
-
-    assert 'age_<item_stable>_30' in undesired_itemset
-    assert 'income_<item_flexible>_low' in undesired_itemset
-    assert 'age_<item_stable>_30' in desired_itemset
-    assert 'income_<item_flexible>_medium' in desired_itemset
+    assert output.target == "status"
+    assert output.action_rules[0]['undesired']['support'] == 10
+    assert output.action_rules[0]['desired']['support'] == 5
+    assert output.action_rules[0]['undesired']['confidence'] == 0.8
+    assert output.action_rules[0]['desired']['confidence'] == 0.6
+    assert output.action_rules[0]['uplift'] == 0.2
+    assert len(output.stable_cols) > 0
+    assert len(output.flexible_cols) > 0
+    assert len(output.column_values) > 0

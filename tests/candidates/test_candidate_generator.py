@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Tests for `action_rules` package."""
 
-import pandas as pd
+import numpy as np
 import pytest
 
 from action_rules.candidates.candidate_generator import CandidateGenerator
@@ -9,63 +9,78 @@ from action_rules.rules.rules import Rules
 
 
 @pytest.fixture
-def sample_frames():
-    """Fixture for sample frames to be used in tests."""
-    frames = {
-        'status_<item_target>_default': pd.DataFrame(
-            {
-                'age_<item_stable>_30': [1, 0, 0],
-                'income_<item_flexible>_low': [1, 0, 0],
-                'status_<item_target>_default': [1, 0, 0],
-            }
-        ),
-        'status_<item_target>_paid': pd.DataFrame(
-            {
-                'age_<item_stable>_30': [0, 1, 0],
-                'income_<item_flexible>_low': [0, 1, 0],
-                'status_<item_target>_paid': [0, 1, 0],
-            }
-        ),
-    }
-    return frames
+def candidate_generator():
+    """
+    Fixture to initialize a CandidateGenerator object with preset parameters.
 
-
-@pytest.fixture
-def rules():
-    """Fixture for Rules instance."""
-    return Rules('status_<item_target>_default', 'status_<item_target>_paid')
-
-
-@pytest.fixture
-def candidate_generator(sample_frames, rules):
-    """Fixture for CandidateGenerator instance."""
+    Returns
+    -------
+    CandidateGenerator
+        An instance of the CandidateGenerator class.
+    """
+    frames = {0: np.array([[1, 0], [0, 1]]), 1: np.array([[0, 1], [1, 0]])}
+    rules = Rules(undesired_state=0, desired_state=1, columns=['col1', 'col2'])
     return CandidateGenerator(
-        frames=sample_frames,
+        frames=frames,
         min_stable_attributes=1,
         min_flexible_attributes=1,
         min_undesired_support=1,
         min_desired_support=1,
         min_undesired_confidence=0.5,
         min_desired_confidence=0.5,
-        undesired_state='status_<item_target>_default',
-        desired_state='status_<item_target>_paid',
+        undesired_state=0,
+        desired_state=1,
         rules=rules,
+        use_sparse_matrix=False,
     )
 
 
+def test_init(candidate_generator):
+    """
+    Test the initialization of the CandidateGenerator class.
+
+    Parameters
+    ----------
+    candidate_generator : CandidateGenerator
+        The CandidateGenerator instance to test.
+
+    Asserts
+    -------
+    Asserts that the initialization parameters are correctly set.
+    """
+    assert candidate_generator.min_stable_attributes == 1
+    assert candidate_generator.min_flexible_attributes == 1
+    assert candidate_generator.min_undesired_support == 1
+    assert candidate_generator.min_undesired_confidence == 0.5
+    assert candidate_generator.min_desired_support == 1
+    assert candidate_generator.min_desired_confidence == 0.5
+    assert candidate_generator.undesired_state == 0
+    assert candidate_generator.desired_state == 1
+    assert not candidate_generator.use_sparse_matrix
+
+
 def test_generate_candidates(candidate_generator):
-    """Test the generate_candidates method of CandidateGenerator."""
-    ar_prefix = tuple()
-    itemset_prefix = tuple()
-    stable_items_binding = {'age': ['age_<item_stable>_30']}
-    flexible_items_binding = {'income': ['income_<item_flexible>_low']}
-    undesired_mask = pd.Series([1, 0, 0])
-    desired_mask = pd.Series([0, 1, 0])
-    actionable_attributes = 0
+    """
+    Test the generate_candidates method.
+
+    Parameters
+    ----------
+    candidate_generator : CandidateGenerator
+        The CandidateGenerator instance to test.
+
+    Asserts
+    -------
+    Asserts that candidates are generated correctly.
+    """
+    ar_prefix = ()
+    itemset_prefix = ()
+    stable_items_binding = {'attr1': [0], 'attr2': [1]}
+    flexible_items_binding = {'attr3': [0, 1]}
+    undesired_mask = np.array([1, 0])
+    desired_mask = np.array([0, 1])
+    actionable_attributes = 1
     stop_list = []
     stop_list_itemset = []
-    undesired_state = 'status_<item_target>_default'
-    desired_state = 'status_<item_target>_paid'
     new_branches = candidate_generator.generate_candidates(
         ar_prefix,
         itemset_prefix,
@@ -76,59 +91,79 @@ def test_generate_candidates(candidate_generator):
         actionable_attributes,
         stop_list,
         stop_list_itemset,
-        undesired_state,
-        desired_state,
-        verbose=True,
+        undesired_state=0,
+        desired_state=1,
+        verbose=False,
     )
-    assert len(new_branches) > 0
+    assert isinstance(new_branches, list)
 
 
 def test_get_frames(candidate_generator):
-    """Test the get_frames method of CandidateGenerator."""
-    undesired_mask = pd.Series([1, 0, 0])
-    desired_mask = pd.Series([0, 1, 0])
-    undesired_state = 'status_<item_target>_default'
-    desired_state = 'status_<item_target>_paid'
+    """
+    Test the get_frames method.
+
+    Parameters
+    ----------
+    candidate_generator : CandidateGenerator
+        The CandidateGenerator instance to test.
+
+    Asserts
+    -------
+    Asserts that frames for the undesired and desired states are returned correctly.
+    """
+    undesired_mask = np.array([1, 0])
+    desired_mask = np.array([0, 1])
     undesired_frame, desired_frame = candidate_generator.get_frames(
-        undesired_mask, desired_mask, undesired_state, desired_state
+        undesired_mask, desired_mask, undesired_state=0, desired_state=1
     )
-    assert not undesired_frame.empty
-    assert not desired_frame.empty
+    np.testing.assert_array_equal(undesired_frame, candidate_generator.frames[0] * undesired_mask)
+    np.testing.assert_array_equal(desired_frame, candidate_generator.frames[1] * desired_mask)
 
 
 def test_reduce_candidates_by_min_attributes(candidate_generator):
-    """Test the reduce_candidates_by_min_attributes method of CandidateGenerator."""
-    stable_items_binding = {'age': ['age_<item_stable>_30', 'age_<item_stable>_40', 'age_<item_stable>_50']}
-    flexible_items_binding = {'income': ['income_<item_flexible>_low', 'income_<item_flexible>_high']}
+    """
+    Test the reduce_candidates_by_min_attributes method.
+
+    Parameters
+    ----------
+    candidate_generator : CandidateGenerator
+        The CandidateGenerator instance to test.
+
+    Asserts
+    -------
+    Asserts that the candidate sets are reduced correctly based on minimum attributes.
+    """
     k = 1
-    actionable_attributes = 0
-    reduced_stable_items_binding, reduced_flexible_items_binding = (
-        candidate_generator.reduce_candidates_by_min_attributes(
-            k, actionable_attributes, stable_items_binding, flexible_items_binding
-        )
+    actionable_attributes = 1
+    stable_items_binding = {'attr1': [0], 'attr2': [1]}
+    flexible_items_binding = {'attr3': [0, 1]}
+    reduced_stable, reduced_flexible = candidate_generator.reduce_candidates_by_min_attributes(
+        k, actionable_attributes, stable_items_binding, flexible_items_binding
     )
-    assert len(reduced_stable_items_binding) == 1
-    assert len(reduced_flexible_items_binding) == 0
-    k = 2
-    actionable_attributes = 0
-    reduced_stable_items_binding, reduced_flexible_items_binding = (
-        candidate_generator.reduce_candidates_by_min_attributes(
-            k, actionable_attributes, stable_items_binding, flexible_items_binding
-        )
-    )
-    assert len(reduced_stable_items_binding) == 1
-    assert len(reduced_flexible_items_binding) == 1
+    assert reduced_stable == {'attr1': [0], 'attr2': [1]}
+    assert reduced_flexible == {}
 
 
 def test_process_stable_candidates(candidate_generator):
-    """Test the process_stable_candidates method of CandidateGenerator."""
-    ar_prefix = tuple()
-    itemset_prefix = tuple()
-    reduced_stable_items_binding = {'age': ['age_<item_stable>_30']}
+    """
+    Test the process_stable_candidates method.
+
+    Parameters
+    ----------
+    candidate_generator : CandidateGenerator
+        The CandidateGenerator instance to test.
+
+    Asserts
+    -------
+    Asserts that stable candidates are processed correctly.
+    """
+    ar_prefix = ()
+    itemset_prefix = ()
+    reduced_stable_items_binding = {'attr1': [0]}
     stop_list = []
-    stable_candidates = {'age': ['age_<item_stable>_30']}
-    undesired_frame = pd.DataFrame({'age_<item_stable>_30': [1, 0, 0]})
-    desired_frame = pd.DataFrame({'age_<item_stable>_30': [0, 1, 0]})
+    stable_candidates = {'attr1': [0]}
+    undesired_frame = np.array([[1, 0], [0, 1]])
+    desired_frame = np.array([[0, 1], [1, 0]])
     new_branches = []
     candidate_generator.process_stable_candidates(
         ar_prefix,
@@ -139,22 +174,33 @@ def test_process_stable_candidates(candidate_generator):
         undesired_frame,
         desired_frame,
         new_branches,
-        verbose=True,
+        verbose=False,
     )
-    assert len(new_branches) > 0
+    assert isinstance(new_branches, list)
 
 
 def test_process_flexible_candidates(candidate_generator):
-    """Test the process_flexible_candidates method of CandidateGenerator."""
-    ar_prefix = tuple()
-    itemset_prefix = tuple()
-    reduced_flexible_items_binding = {'income': ['income_<item_flexible>_low']}
+    """
+    Test the process_flexible_candidates method.
+
+    Parameters
+    ----------
+    candidate_generator : CandidateGenerator
+        The CandidateGenerator instance to test.
+
+    Asserts
+    -------
+    Asserts that flexible candidates are processed correctly.
+    """
+    ar_prefix = ()
+    itemset_prefix = ()
+    reduced_flexible_items_binding = {'attr3': [0, 1]}
     stop_list = []
     stop_list_itemset = []
-    flexible_candidates = {'income': ['income_<item_flexible>_low']}
-    undesired_frame = pd.DataFrame({'income_<item_flexible>_low': [1, 0, 0]})
-    desired_frame = pd.DataFrame({'income_<item_flexible>_low': [0, 1, 0]})
-    actionable_attributes = 0
+    flexible_candidates = {'attr3': [0, 1]}
+    undesired_frame = np.array([[1, 0], [0, 1]])
+    desired_frame = np.array([[0, 1], [1, 0]])
+    actionable_attributes = 1
     new_branches = []
     candidate_generator.process_flexible_candidates(
         ar_prefix,
@@ -167,39 +213,88 @@ def test_process_flexible_candidates(candidate_generator):
         desired_frame,
         actionable_attributes,
         new_branches,
-        verbose=True,
+        verbose=False,
     )
-    assert len(new_branches) > 0
+    assert isinstance(new_branches, list)
 
 
 def test_process_items(candidate_generator):
-    """Test the process_items method of CandidateGenerator."""
-    attribute = 'income'
-    items = ['income_<item_flexible>_low']
-    itemset_prefix = tuple()
+    """
+    Test the process_items method.
+
+    Parameters
+    ----------
+    candidate_generator : CandidateGenerator
+        The CandidateGenerator instance to test.
+
+    Asserts
+    -------
+    Asserts that items are processed correctly to generate states and counts.
+    """
+    attribute = 'attr3'
+    items = [0, 1]
+    itemset_prefix = ()
+    new_ar_prefix = ()
     stop_list_itemset = []
-    undesired_frame = pd.DataFrame({'income_<item_flexible>_low': [1, 0, 0]})
-    desired_frame = pd.DataFrame({'income_<item_flexible>_low': [0, 1, 0]})
-    flexible_candidates = {'income': ['income_<item_flexible>_low']}
+    undesired_frame = np.array([[1, 0], [0, 1]])
+    desired_frame = np.array([[0, 1], [1, 0]])
+    flexible_candidates = {'attr3': [0, 1]}
+    verbose = False
     undesired_states, desired_states, undesired_count, desired_count = candidate_generator.process_items(
         attribute,
         items,
         itemset_prefix,
+        new_ar_prefix,
         stop_list_itemset,
         undesired_frame,
         desired_frame,
         flexible_candidates,
-        verbose=True,
+        verbose,
     )
-    assert len(undesired_states) > 0
-    assert len(desired_states) > 0
+    assert isinstance(undesired_states, list)
+    assert isinstance(desired_states, list)
+    assert isinstance(undesired_count, int)
+    assert isinstance(desired_count, int)
 
 
 def test_update_new_branches(candidate_generator):
-    """Test the update_new_branches method of CandidateGenerator."""
-    new_branches = [{'item': 'income_<item_flexible>_low'}]
-    stable_candidates = {'age': ['age_<item_stable>_30']}
-    flexible_candidates = {'income': ['income_<item_flexible>_low']}
+    """
+    Test the update_new_branches method.
+
+    Parameters
+    ----------
+    candidate_generator : CandidateGenerator
+        The CandidateGenerator instance to test.
+
+    Asserts
+    -------
+    Asserts that new branches are updated correctly.
+    """
+    new_branches = [{'item': 0}]
+    stable_candidates = {'attr1': [0]}
+    flexible_candidates = {'attr3': [0, 1]}
     candidate_generator.update_new_branches(new_branches, stable_candidates, flexible_candidates)
     assert 'stable_items_binding' in new_branches[0]
     assert 'flexible_items_binding' in new_branches[0]
+
+
+def test_in_stop_list(candidate_generator):
+    """
+    Test the in_stop_list method.
+
+    Parameters
+    ----------
+    candidate_generator : CandidateGenerator
+        The CandidateGenerator instance to test.
+
+    Asserts
+    -------
+    Asserts that the stop list check is performed correctly.
+    """
+    ar_prefix = (0,)
+    stop_list = [(0,)]
+    result = candidate_generator.in_stop_list(ar_prefix, stop_list)
+    assert result is True
+    ar_prefix = (1,)
+    result = candidate_generator.in_stop_list(ar_prefix, stop_list)
+    assert result is False

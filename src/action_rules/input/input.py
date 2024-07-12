@@ -35,35 +35,75 @@ class Input:
         rules = json.loads(json_data)
         action_rules = []
         target = rules[0]['target']['attribute']
+        stable_items_binding = {}  # type: dict
+        flexible_items_binding = {}  # type: dict
+        column_values = {}
+        highest_index = 0
         for rule in rules:
+            if highest_index == 0:
+                column_values[highest_index] = (rule['target']['attribute'], rule['target']['undesired'])
+                highest_index += 1
+                column_values[highest_index] = (rule['target']['attribute'], rule['target']['desired'])
+                highest_index += 1
             ar_dict = {
                 'undesired': {
                     'itemset': [],
                     'support': rule['support of undesired part'],
                     'confidence': rule['confidence of undesired part'],
-                    'target': f"{rule['target']['attribute']}_<item_target>_{rule['target']['undesired']}",
+                    'target': 0,
                 },
                 'desired': {
                     'itemset': [],
                     'support': rule['support of desired part'],
                     'confidence': rule['confidence of desired part'],
-                    'target': f"{rule['target']['attribute']}_<item_target>_{rule['target']['desired']}",
+                    'target': 1,
                 },
                 'uplift': rule['uplift'],
             }
-
             for item in rule['stable']:
-                if 'flexible_as_stable' in item:
-                    ar_dict['undesired']['itemset'].append(f"{item['attribute']}_<item_flexible>_{item['value']}")
-                    ar_dict['desired']['itemset'].append(f"{item['attribute']}_<item_flexible>_{item['value']}")
-                else:
-                    ar_dict['undesired']['itemset'].append(f"{item['attribute']}_<item_stable>_{item['value']}")
-                    ar_dict['desired']['itemset'].append(f"{item['attribute']}_<item_stable>_{item['value']}")
+                if (item['attribute'], item['value']) not in column_values.values():
+                    column_values[highest_index] = (item['attribute'], item['value'])
+                    if 'flexible_as_stable' in item:
+                        if item['attribute'] not in flexible_items_binding.keys():
+                            flexible_items_binding.update({item['attribute']: []})
+                        flexible_items_binding[item['attribute']].append(highest_index)
+                    else:
+                        if item['attribute'] not in stable_items_binding.keys():
+                            stable_items_binding.update({item['attribute']: []})
+                        stable_items_binding[item['attribute']].append(highest_index)
+                    highest_index += 1
+                value = [
+                    key
+                    for key, (attr, value) in column_values.items()
+                    if value == item['value'] and attr == item['attribute']
+                ][0]
+                ar_dict['undesired']['itemset'].append(value)
+                ar_dict['desired']['itemset'].append(value)
 
             for item in rule['flexible']:
-                ar_dict['undesired']['itemset'].append(f"{item['attribute']}_<item_flexible>_{item['undesired']}")
-                ar_dict['desired']['itemset'].append(f"{item['attribute']}_<item_flexible>_{item['desired']}")
+                if item['attribute'] not in flexible_items_binding.keys():
+                    flexible_items_binding.update({item['attribute']: []})
+                if (item['attribute'], item['undesired']) not in column_values.values():
+                    column_values[highest_index] = (item['attribute'], item['undesired'])
+                    flexible_items_binding[item['attribute']].append(highest_index)
+                    highest_index += 1
+                if (item['attribute'], item['desired']) not in column_values.values():
+                    column_values[highest_index] = (item['attribute'], item['desired'])
+                    flexible_items_binding[item['attribute']].append(highest_index)
+                    highest_index += 1
+                value_0 = [
+                    key
+                    for key, (attr, value) in column_values.items()
+                    if value == item['undesired'] and attr == item['attribute']
+                ][0]
+                value_1 = [
+                    key
+                    for key, (attr, value) in column_values.items()
+                    if value == item['desired'] and attr == item['attribute']
+                ][0]
+                ar_dict['undesired']['itemset'].append(value_0)
+                ar_dict['desired']['itemset'].append(value_1)
 
             action_rules.append(ar_dict)
 
-        return Output(action_rules, target)
+        return Output(action_rules, target, stable_items_binding, flexible_items_binding, column_values)
