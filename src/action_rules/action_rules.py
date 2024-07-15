@@ -203,7 +203,7 @@ class ActionRules:
                 df_library_imported = False
 
         if not df_library_imported:
-            raise ImportError('Just Pandas or cuDF dataframes are supported')
+            raise ImportError('Just Pandas or cuDF dataframes are supported.')
 
         self.np = np
         self.pd = pd
