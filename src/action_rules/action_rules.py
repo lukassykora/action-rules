@@ -182,19 +182,29 @@ class ActionRules:
 
             is_gpu_np = False
 
+        df_library_imported = False
         try:
-            import cudf as pd
-
-            if isinstance(df, pd.DataFrame):
-                is_gpu_pd = True
-            else:
-                import pandas as pd
-
-                is_gpu_pd = False
-        except ImportError:
             import pandas as pd
 
-            is_gpu_pd = False
+            if isinstance(df, pd.DataFrame):
+                is_gpu_pd = False
+                df_library_imported = True
+        except ImportError:
+            df_library_imported = False
+
+        if not df_library_imported:
+            try:
+                import cudf as pd
+
+                if isinstance(df, pd.DataFrame):
+                    is_gpu_pd = True
+                    df_library_imported = True
+            except ImportError:
+                df_library_imported = False
+
+        if not df_library_imported:
+            raise ImportError('Just Pandas or cuDF dataframes are supported.')
+
         self.np = np
         self.pd = pd
         self.is_gpu_np = is_gpu_np
