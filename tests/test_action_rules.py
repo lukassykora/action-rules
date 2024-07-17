@@ -226,7 +226,7 @@ def test_get_split_tables(action_rules):
 
 
 @pytest.mark.parametrize(
-    "use_sparse",
+    "use_sparse_matrix",
     [
         False,
         True,
