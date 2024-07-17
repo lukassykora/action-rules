@@ -225,7 +225,45 @@ def test_get_split_tables(action_rules):
     np.testing.assert_array_equal(split_tables[3], data[:, [0, 2]])
 
 
-def test_fit(action_rules):
+@pytest.mark.parametrize(
+    "use_gpu",
+    [
+        False,
+        True,
+    ],
+)
+def test_fit(action_rules, use_gpu):
+    """
+    Test the fit method.
+
+    Parameters
+    ----------
+    action_rules : ActionRules
+        The ActionRules instance to test.
+    use_gpu : bool
+        Use sparse array.
+
+    Asserts
+    -------
+    Asserts that the full workflow of generating action rules works correctly.
+    """
+    df = pd.DataFrame({'stable': ['a', 'b', 'a'], 'flexible': ['x', 'y', 'z'], 'target': ['yes', 'no', 'no']})
+    action_rules.fit(
+        df,
+        stable_attributes=['stable'],
+        flexible_attributes=['flexible'],
+        target='target',
+        target_undesired_state='no',
+        target_desired_state='yes',
+        use_gpu=use_gpu,
+    )
+    rules = action_rules.get_rules()
+    assert rules is not None
+    assert len(rules.action_rules) == 1
+    assert isinstance(rules, Output)
+
+
+def test_fit_raises_error_when_already_fit(action_rules):
     """
     Test the fit method.
 
@@ -236,10 +274,9 @@ def test_fit(action_rules):
 
     Asserts
     -------
-    Asserts that the full workflow of generating action rules works correctly.
+    Asserts that the initialized model can not be fit again.
     """
     df = pd.DataFrame({'stable': ['a', 'b', 'a'], 'flexible': ['x', 'y', 'z'], 'target': ['yes', 'no', 'yes']})
-    action_rules.set_array_library(use_gpu=False, df=df)
     action_rules.fit(
         df,
         stable_attributes=['stable'],
@@ -248,9 +285,15 @@ def test_fit(action_rules):
         target_undesired_state='no',
         target_desired_state='yes',
     )
-    rules = action_rules.get_rules()
-    assert rules is not None
-    assert isinstance(rules, Output)
+    with pytest.raises(RuntimeError, match="The model is already fit."):
+        action_rules.fit(
+            df,
+            stable_attributes=['stable'],
+            flexible_attributes=['flexible'],
+            target='target',
+            target_undesired_state='no',
+            target_desired_state='yes',
+        )
 
 
 def test_get_rules(action_rules):
