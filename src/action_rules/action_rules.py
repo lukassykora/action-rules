@@ -412,7 +412,7 @@ class ActionRules:
         )
         del data
         if self.is_gpu_np:
-            self.np.get_default_memory_pool().free_all_blocks()
+            self.np.get_default_memory_pool().free_all_blocks()  # type: ignore
 
     def get_bindings(
         self,
