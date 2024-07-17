@@ -264,6 +264,39 @@ def test_fit(action_rules, use_sparse_matrix):
     assert isinstance(rules, Output)
 
 
+def test_fit_raises_error_when_already_fit(action_rules):
+    """
+    Test the fit method.
+
+    Parameters
+    ----------
+    action_rules : ActionRules
+        The ActionRules instance to test.
+
+    Asserts
+    -------
+    Asserts that the initialized model can not be fit again.
+    """
+    df = pd.DataFrame({'stable': ['a', 'b', 'a'], 'flexible': ['x', 'y', 'z'], 'target': ['yes', 'no', 'yes']})
+    action_rules.fit(
+        df,
+        stable_attributes=['stable'],
+        flexible_attributes=['flexible'],
+        target='target',
+        target_undesired_state='no',
+        target_desired_state='yes',
+    )
+    with pytest.raises(RuntimeError, match="The model is already fit."):
+        action_rules.fit(
+            df,
+            stable_attributes=['stable'],
+            flexible_attributes=['flexible'],
+            target='target',
+            target_undesired_state='no',
+            target_desired_state='yes',
+        )
+
+
 def test_get_rules(action_rules):
     """
     Test the get_rules method.
