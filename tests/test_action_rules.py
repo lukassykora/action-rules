@@ -247,7 +247,7 @@ def test_fit(action_rules, use_sparse_matrix):
     -------
     Asserts that the full workflow of generating action rules works correctly.
     """
-    df = pd.DataFrame({'stable': ['a', 'b', 'a'], 'flexible': ['x', 'y', 'z'], 'target': ['yes', 'no', 'yes']})
+    df = pd.DataFrame({'stable': ['a', 'b', 'a'], 'flexible': ['x', 'y', 'z'], 'target': ['yes', 'no', 'no']})
     action_rules.set_array_library(use_gpu=False, df=df)
     action_rules.fit(
         df,
