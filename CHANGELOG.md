@@ -97,3 +97,7 @@
 ## [0.0.24] - 2024-07-15
 
 * cuDF improved import.
+
+## [0.0.25] - 2024-07-17
+
+* Clear GPU memory pool.
