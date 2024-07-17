@@ -348,6 +348,8 @@ class ActionRules:
         use_sparse_matrix : bool, optional
             If True, rhe sparse matrix is used. Default is False.
         """
+        if self.output is not None:
+            raise RuntimeError("The model is already fit.")
         self.set_array_library(use_gpu, data)
         data = self.one_hot_encode(data, stable_attributes, flexible_attributes, target)
         data, columns = self.df_to_array(data, use_gpu, use_sparse_matrix)

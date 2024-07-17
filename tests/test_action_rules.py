@@ -225,7 +225,14 @@ def test_get_split_tables(action_rules):
     np.testing.assert_array_equal(split_tables[3], data[:, [0, 2]])
 
 
-def test_fit(action_rules):
+@pytest.mark.parametrize(
+    "use_sparse",
+    [
+        False,
+        True,
+    ],
+)
+def test_fit(action_rules, use_sparse_matrix):
     """
     Test the fit method.
 
@@ -233,6 +240,8 @@ def test_fit(action_rules):
     ----------
     action_rules : ActionRules
         The ActionRules instance to test.
+    use_sparse_matrix : bool
+        Use sparse array.
 
     Asserts
     -------
@@ -247,9 +256,11 @@ def test_fit(action_rules):
         target='target',
         target_undesired_state='no',
         target_desired_state='yes',
+        use_sparse_matrix=use_sparse_matrix,
     )
     rules = action_rules.get_rules()
     assert rules is not None
+    assert len(rules.action_rules) == 1
     assert isinstance(rules, Output)
 
 
