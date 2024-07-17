@@ -226,13 +226,13 @@ def test_get_split_tables(action_rules):
 
 
 @pytest.mark.parametrize(
-    "use_sparse_matrix",
+    "use_gpu",
     [
         False,
         True,
     ],
 )
-def test_fit(action_rules, use_sparse_matrix):
+def test_fit(action_rules, use_gpu):
     """
     Test the fit method.
 
@@ -240,7 +240,7 @@ def test_fit(action_rules, use_sparse_matrix):
     ----------
     action_rules : ActionRules
         The ActionRules instance to test.
-    use_sparse_matrix : bool
+    use_gpu : bool
         Use sparse array.
 
     Asserts
@@ -248,7 +248,6 @@ def test_fit(action_rules, use_sparse_matrix):
     Asserts that the full workflow of generating action rules works correctly.
     """
     df = pd.DataFrame({'stable': ['a', 'b', 'a'], 'flexible': ['x', 'y', 'z'], 'target': ['yes', 'no', 'no']})
-    action_rules.set_array_library(use_gpu=False, df=df)
     action_rules.fit(
         df,
         stable_attributes=['stable'],
@@ -256,7 +255,7 @@ def test_fit(action_rules, use_sparse_matrix):
         target='target',
         target_undesired_state='no',
         target_desired_state='yes',
-        use_sparse_matrix=use_sparse_matrix,
+        use_gpu=use_gpu,
     )
     rules = action_rules.get_rules()
     assert rules is not None
