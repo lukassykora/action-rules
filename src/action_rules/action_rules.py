@@ -426,8 +426,6 @@ class ActionRules:
 
         Parameters
         ----------
-        data : Union[cudf.DataFrame, pandas.DataFrame]
-            The dataset containing the attributes.
         stable_attributes : list
             List of stable attributes.
         flexible_attributes : list
