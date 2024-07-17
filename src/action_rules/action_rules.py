@@ -411,6 +411,8 @@ class ActionRules:
             self.rules.action_rules, target, stable_items_binding, flexible_items_binding, column_values
         )
         del data
+        if self.is_gpu_np:
+            self.np.get_default_memory_pool().free_all_blocks()  # type: ignore
 
     def get_bindings(
         self,
@@ -424,8 +426,6 @@ class ActionRules:
 
         Parameters
         ----------
-        data : Union[cudf.DataFrame, pandas.DataFrame]
-            The dataset containing the attributes.
         stable_attributes : list
             List of stable attributes.
         flexible_attributes : list
