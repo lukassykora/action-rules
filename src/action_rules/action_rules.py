@@ -268,6 +268,7 @@ class ActionRules:
                 from scipy.sparse import csr_matrix
 
                 data = csr_matrix(df.values, dtype=self.np.uint8).T  # type: ignore
+                data.eliminate_zeros()
             else:
                 data = df.to_numpy(dtype=self.np.uint8).T  # type: ignore
         return data, columns
