@@ -101,3 +101,7 @@
 ## [0.0.25] - 2024-07-17
 
 * Clear GPU memory pool.
+
+## [0.0.26] - 2024-07-17
+
+* Eliminate zeros for sparse matrix.
