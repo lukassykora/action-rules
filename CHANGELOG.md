@@ -105,3 +105,7 @@
 ## [0.0.26] - 2024-07-17
 
 * Eliminate zeros for sparse matrix.
+
+## [0.0.27] - 2024-07-19
+
+* Readme improved.
