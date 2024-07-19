@@ -48,21 +48,32 @@ min_desired_confidence = 0.5  # min 0.5
 undesired_state = '0'
 desired_state = '1'
 # Action Rules Mining
-action_rules = ActionRules(min_stable_attributes, min_flexible_attributes, min_undesired_support,
-                           min_undesired_confidence, min_desired_support, min_desired_confidence, verbose=False)
+action_rules = ActionRules(
+    min_stable_attributes=min_stable_attributes,
+    min_flexible_attributes=min_flexible_attributes,
+    min_undesired_support=min_undesired_support,
+    min_undesired_confidence=min_undesired_confidence,
+    min_desired_support=min_desired_support,
+    min_desired_confidence=min_desired_confidence,
+    verbose=True
+)
 # Fit
 action_rules.fit(
-    data,
-    stable_attributes,
-    flexible_attributes,
-    target,
-    undesired_state,
-    desired_state,
+    data=data,  # cuDF or Pandas Dataframe
+    stable_attributes=stable_attributes,
+    flexible_attributes=flexible_attributes,
+    target=target,
+    target_undesired_state=undesired_state,
+    target_desired_state=desired_state,
+    use_sparse_matrix=True,  # needs SciPy or Cupyx (if use_gpu is True) installed
+    use_gpu=False,  # needs Cupy installed
 )
 # Print rules
+# Example: [(Age: O) ∧ (Sex: M) ∧ (Embarked: S → C)] ⇒ [Survived: 0 → 1], support of undesired part: 1, confidence of undesired part: 1.0, support of desired part: 1, confidence of desired part: 1.0, uplift: 1.0
 for action_rule in action_rules.get_rules().get_ar_notation():
     print(action_rule)
 # Print rules (pretty notation)
+# Example: If attribute 'Age' is 'O', attribute 'Sex' is 'M', attribute 'Embarked' value 'S' is changed to 'C', then 'Survived' value '0' is changed to '1 with uplift: 1.0.
 for action_rule in action_rules.get_rules().get_pretty_ar_notation():
     print(action_rule)
 # JSON export

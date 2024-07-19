@@ -350,6 +350,7 @@ class CandidateGenerator:
                     print('- extended by stable attribute')
                     print('undesired state support: ' + str(undesired_support))
                     print('desired state support: ' + str(desired_support))
+                    print('')
 
                 if undesired_support < self.min_undesired_support or desired_support < self.min_desired_support:
                     stable_candidates[attribute].remove(item)
@@ -549,6 +550,7 @@ class CandidateGenerator:
                 print('- extended by flexible attribute')
                 print('undesired state support: ' + str(undesired_support))
                 print('desired state support: ' + str(desired_support))
+                print('')
 
             undesired_conf = self.rules.calculate_confidence(undesired_support, desired_support)
             if undesired_support >= self.min_undesired_support:

@@ -268,7 +268,6 @@ class ActionRules:
                 from scipy.sparse import csr_matrix
 
                 data = csr_matrix(df.values, dtype=self.np.uint8).T  # type: ignore
-                data.eliminate_zeros()
             else:
                 data = df.to_numpy(dtype=self.np.uint8).T  # type: ignore
         return data, columns
@@ -362,6 +361,7 @@ class ActionRules:
             print('Maximum number of nodes to check for support:')
             print('_____________________________________________')
             print(self.count_max_nodes(stable_items_binding, flexible_items_binding))
+            print('')
         stop_list = self.get_stop_list(stable_items_binding, flexible_items_binding)
         frames = self.get_split_tables(data, target_items_binding, target, use_gpu, use_sparse_matrix)
         undesired_state = columns.index(target + '_<item_target>_' + str(target_undesired_state))
