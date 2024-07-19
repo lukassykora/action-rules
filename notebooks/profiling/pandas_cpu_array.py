@@ -19,7 +19,8 @@ undesired_state = 'Yes'
 desired_state = 'No'
 
 pd.set_option('display.max_columns', None)
-data_frame = pd.read_csv("data/telco.csv", sep=";")
+data_frame = pd.read_csv("./../data/telco.csv", sep=";")
+data_frame = pd.concat([data_frame] * 20)
 
 # Action Rules Mining
 action_rules = ActionRules(
