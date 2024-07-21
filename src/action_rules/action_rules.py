@@ -534,7 +534,7 @@ class ActionRules:
                 frames[item] = data[:, mask]
         return frames
 
-    def get_rules(self) -> Optional[Output]:
+    def get_rules(self) -> Output:
         """
         Return the generated action rules if available.
 
@@ -544,6 +544,26 @@ class ActionRules:
             The generated action rules, or None if no rules have been generated.
         """
         if self.output is None:
-            return None
-        else:
-            return self.output
+            raise RuntimeError("The model is not fit.")
+        return self.output
+
+    def predict(self, frame_row: Union['cudf.Series', 'pandas.Series']) -> Union['cudf.DataFrame', 'pandas.DataFrame']:
+        if self.output is None:
+            raise RuntimeError("The model is not fit.")
+        index_value_tuples = list(zip(frame_row.index, frame_row))
+        values = []
+        column_values = self.output.column_values
+        for index_value_tuple in index_value_tuples:
+            values.append(list(column_values.keys())[list(column_values.values()).index(index_value_tuple)])
+        new_values = tuple(values)
+        predicted = []
+        for i, action_rule in enumerate(self.output.action_rules):
+            if set(action_rule['undesired']['itemset']) <= set(new_values):
+                predicted_row = frame_row.copy()
+                predicted_row['ActionRulesRuleIndex'] = i
+                for recommended in set(action_rule['desired']['itemset']) - set(new_values):
+                    attribute, value = column_values[recommended]
+                    predicted_row[attribute + ' (Recommended)'] = value
+                predicted.append(predicted_row)
+        return self.pd.DataFrame(predicted)
+
