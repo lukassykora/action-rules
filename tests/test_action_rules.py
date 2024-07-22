@@ -313,3 +313,37 @@ def test_get_rules(action_rules):
     action_rules.output = MagicMock()
     assert action_rules.get_rules() is not None
     assert action_rules.get_rules() == action_rules.output
+
+
+def test_predict(action_rules):
+    """
+    Test the predict method of the ActionRules class.
+
+    Parameters
+    ----------
+    action_rules : ActionRules
+        The ActionRules instance to test.
+
+    Asserts
+    -------
+    Asserts that the prediction works correctly and returns the expected DataFrame.
+    """
+    frame_row = pd.Series({'status': 'default', 'age': '30'})
+    result = action_rules.predict(frame_row)
+
+    assert not result.empty
+    assert 'status (Recommended)' in result.columns
+    assert 'ActionRules_RuleIndex' in result.columns
+    assert 'ActionRules_UndesiredSupport' in result.columns
+    assert 'ActionRules_DesiredSupport' in result.columns
+    assert 'ActionRules_UndesiredConfidence' in result.columns
+    assert 'ActionRules_DesiredConfidence' in result.columns
+    assert 'ActionRules_Uplift' in result.columns
+
+    assert result.iloc[0]['status (Recommended)'] == 'paid'
+    assert result.iloc[0]['ActionRules_RuleIndex'] == 0
+    assert result.iloc[0]['ActionRules_UndesiredSupport'] == 10
+    assert result.iloc[0]['ActionRules_DesiredSupport'] == 5
+    assert result.iloc[0]['ActionRules_UndesiredConfidence'] == 0.8
+    assert result.iloc[0]['ActionRules_DesiredConfidence'] == 0.6
+    assert result.iloc[0]['ActionRules_Uplift'] == 0.2
