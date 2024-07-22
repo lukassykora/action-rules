@@ -177,6 +177,14 @@ class Output:
                 + self.column_values[ar_dict['desired']['target']][1]
                 + " with uplift: "
                 + str(ar_dict['uplift'])
+                + ", support of undesired part: "
+                + str(ar_dict['undesired']['support'])
+                + ", confidence of undesired part: "
+                + str(ar_dict['undesired']['confidence'])
+                + ", support of desired part: "
+                + str(ar_dict['desired']['support'])
+                + ", confidence of desired part: "
+                + str(ar_dict['desired']['confidence'])
                 + "."
             )
             rules.append(text)
