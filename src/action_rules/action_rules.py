@@ -3,7 +3,7 @@
 import itertools
 import warnings
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union  # noqa
 
 from .candidates.candidate_generator import CandidateGenerator
 from .output.output import Output
@@ -616,4 +616,4 @@ class ActionRules:
                 predicted_row['ActionRules_DesiredConfidence'] = action_rule['desired']['confidence']
                 predicted_row['ActionRules_Uplift'] = action_rule['uplift']
                 predicted.append(predicted_row)
-        return self.pd.DataFrame(predicted)
+        return self.pd.DataFrame(predicted)  # type: ignore

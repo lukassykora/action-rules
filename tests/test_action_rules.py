@@ -309,7 +309,8 @@ def test_get_rules(action_rules):
     -------
     Asserts that the generated rules are correctly returned.
     """
-    assert action_rules.get_rules() is None
+    with pytest.raises(RuntimeError, match="The model is not fit."):
+        assert action_rules.get_rules() is None
     action_rules.output = MagicMock()
     assert action_rules.get_rules() is not None
     assert action_rules.get_rules() == action_rules.output
@@ -328,11 +329,21 @@ def test_predict(action_rules):
     -------
     Asserts that the prediction works correctly and returns the expected DataFrame.
     """
-    frame_row = pd.Series({'status': 'default', 'age': '30'})
+    frame_row = pd.Series({'stable': 'a', 'flexible': 'z'})
+    with pytest.raises(RuntimeError, match="The model is not fit."):
+        action_rules.predict(frame_row)
+    df = pd.DataFrame({'stable': ['a', 'b', 'a'], 'flexible': ['x', 'y', 'z'], 'target': ['yes', 'no', 'no']})
+    action_rules.fit(
+        df,
+        stable_attributes=['stable'],
+        flexible_attributes=['flexible'],
+        target='target',
+        target_undesired_state='no',
+        target_desired_state='yes',
+    )
     result = action_rules.predict(frame_row)
-
     assert not result.empty
-    assert 'status (Recommended)' in result.columns
+    assert 'flexible (Recommended)' in result.columns
     assert 'ActionRules_RuleIndex' in result.columns
     assert 'ActionRules_UndesiredSupport' in result.columns
     assert 'ActionRules_DesiredSupport' in result.columns
@@ -340,10 +351,10 @@ def test_predict(action_rules):
     assert 'ActionRules_DesiredConfidence' in result.columns
     assert 'ActionRules_Uplift' in result.columns
 
-    assert result.iloc[0]['status (Recommended)'] == 'paid'
+    assert result.iloc[0]['flexible (Recommended)'] == 'x'
     assert result.iloc[0]['ActionRules_RuleIndex'] == 0
-    assert result.iloc[0]['ActionRules_UndesiredSupport'] == 10
-    assert result.iloc[0]['ActionRules_DesiredSupport'] == 5
-    assert result.iloc[0]['ActionRules_UndesiredConfidence'] == 0.8
-    assert result.iloc[0]['ActionRules_DesiredConfidence'] == 0.6
-    assert result.iloc[0]['ActionRules_Uplift'] == 0.2
+    assert result.iloc[0]['ActionRules_UndesiredSupport'] == 1
+    assert result.iloc[0]['ActionRules_DesiredSupport'] == 1
+    assert result.iloc[0]['ActionRules_UndesiredConfidence'] == 1.0
+    assert result.iloc[0]['ActionRules_DesiredConfidence'] == 1.0
+    assert result.iloc[0]['ActionRules_Uplift'] == 1.0
