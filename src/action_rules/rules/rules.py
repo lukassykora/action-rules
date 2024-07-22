@@ -183,6 +183,6 @@ class Rules:
             (undesired_support / undesired_confidence) * desired_confidence -
             (undesired_support / undesired_confidence - undesired_support).
         """
-        return (undesired_support / undesired_confidence) * desired_confidence - (
+        return ((undesired_support / undesired_confidence) * desired_confidence - (
             undesired_support / undesired_confidence - undesired_support
-        )
+        )) / 100
