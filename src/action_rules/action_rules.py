@@ -3,7 +3,7 @@
 import itertools
 import warnings
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union  # noqa
 
 from .candidates.candidate_generator import CandidateGenerator
 from .output.output import Output
@@ -347,6 +347,11 @@ class ActionRules:
             Use GPU (cuDF) for data processing if available.
         use_sparse_matrix : bool, optional
             If True, rhe sparse matrix is used. Default is False.
+
+        Raises
+        ------
+        RuntimeError
+            If the model has already been fitted.
         """
         if self.output is not None:
             raise RuntimeError("The model is already fit.")
@@ -534,9 +539,14 @@ class ActionRules:
                 frames[item] = data[:, mask]
         return frames
 
-    def get_rules(self) -> Optional[Output]:
+    def get_rules(self) -> Output:
         """
         Return the generated action rules if available.
+
+        Raises
+        ------
+        RuntimeError
+            If the model has not been fitted.
 
         Returns
         -------
@@ -544,6 +554,66 @@ class ActionRules:
             The generated action rules, or None if no rules have been generated.
         """
         if self.output is None:
-            return None
-        else:
-            return self.output
+            raise RuntimeError("The model is not fit.")
+        return self.output
+
+    def predict(self, frame_row: Union['cudf.Series', 'pandas.Series']) -> Union['cudf.DataFrame', 'pandas.DataFrame']:
+        """
+        Predict recommended actions based on the provided row of data.
+
+        This method applies the fitted action rules to the given row of data and generates
+        a DataFrame with recommended actions if any of the action rules are triggered.
+
+        Parameters
+        ----------
+        frame_row : Union['cudf.Series', 'pandas.Series']
+            A row of data in the form of a cuDF or pandas Series. The Series should
+            contain the features required by the action rules.
+
+        Returns
+        -------
+        Union['cudf.DataFrame', 'pandas.DataFrame']
+            A DataFrame with the recommended actions. The DataFrame includes the following columns:
+            - The original attributes with recommended changes.
+            - 'ActionRules_RuleIndex': Index of the action rule applied.
+            - 'ActionRules_UndesiredSupport': Support of the undesired part of the rule.
+            - 'ActionRules_DesiredSupport': Support of the desired part of the rule.
+            - 'ActionRules_UndesiredConfidence': Confidence of the undesired part of the rule.
+            - 'ActionRules_DesiredConfidence': Confidence of the desired part of the rule.
+            - 'ActionRules_Uplift': Uplift value of the rule.
+
+        Raises
+        ------
+        RuntimeError
+            If the model has not been fitted.
+
+        Notes
+        -----
+        The method compares the given row of data against the undesired itemsets of the action rules.
+        If a match is found, it applies the desired itemset changes and records the action rule's
+        metadata. The result is a DataFrame with one or more rows representing the recommended actions
+        for the given data.
+        """
+        if self.output is None:
+            raise RuntimeError("The model is not fit.")
+        index_value_tuples = list(zip(frame_row.index, frame_row))
+        values = []
+        column_values = self.output.column_values
+        for index_value_tuple in index_value_tuples:
+            values.append(list(column_values.keys())[list(column_values.values()).index(index_value_tuple)])
+        new_values = tuple(values)
+        predicted = []
+        for i, action_rule in enumerate(self.output.action_rules):
+            if set(action_rule['undesired']['itemset']) <= set(new_values):
+                predicted_row = frame_row.copy()
+                for recommended in set(action_rule['desired']['itemset']) - set(new_values):
+                    attribute, value = column_values[recommended]
+                    predicted_row[attribute + ' (Recommended)'] = value
+                predicted_row['ActionRules_RuleIndex'] = i
+                predicted_row['ActionRules_UndesiredSupport'] = action_rule['undesired']['support']
+                predicted_row['ActionRules_DesiredSupport'] = action_rule['desired']['support']
+                predicted_row['ActionRules_UndesiredConfidence'] = action_rule['undesired']['confidence']
+                predicted_row['ActionRules_DesiredConfidence'] = action_rule['desired']['confidence']
+                predicted_row['ActionRules_Uplift'] = action_rule['uplift']
+                predicted.append(predicted_row)
+        return self.pd.DataFrame(predicted)  # type: ignore
