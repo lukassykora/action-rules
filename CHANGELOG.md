@@ -109,3 +109,7 @@
 ## [0.0.27] - 2024-07-19
 
 * Readme improved.
+
+## [0.0.28] - 2024-07-23
+
+* Predict function.
