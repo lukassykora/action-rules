@@ -113,3 +113,7 @@
 ## [0.0.28] - 2024-07-23
 
 * Predict function.
+
+## [0.0.29] - 2024-07-23
+
+* Improved pretty notation.
