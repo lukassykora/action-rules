@@ -117,3 +117,9 @@
 ## [0.0.29] - 2024-07-23
 
 * Improved pretty notation.
+
+## [1.0.0] - 2024-07-27
+
+* Uplift fixed.
+* Docstrings and notations.
+* Completely finished.
