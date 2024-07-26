@@ -19,7 +19,7 @@ def candidate_generator():
         An instance of the CandidateGenerator class.
     """
     frames = {0: np.array([[1, 0], [0, 1]]), 1: np.array([[0, 1], [1, 0]])}
-    rules = Rules(undesired_state=0, desired_state=1, columns=['col1', 'col2'])
+    rules = Rules(undesired_state='0', desired_state='1', columns=['col1', 'col2'], count_transactions=2)
     return CandidateGenerator(
         frames=frames,
         min_stable_attributes=1,

@@ -11,12 +11,18 @@ class Input:
 
     Methods
     -------
-    import_action_rules()
+    import_action_rules(json_data)
         Import action rules from a JSON string and set the action_rules attribute.
     """
 
     def __init__(self):
-        """Initialize the Output class with the specified action rules and target attribute."""
+        """
+        Initialize the Input class.
+
+        Notes
+        -----
+        This class is used to import action rules from a JSON string and convert them into an Output object.
+        """
 
     def import_action_rules(self, json_data: str) -> Output:
         """
@@ -31,6 +37,77 @@ class Input:
         -------
         Output
             Output object representing the action rules.
+
+        Notes
+        -----
+        This method parses a JSON string containing action rules, extracts relevant information,
+        and constructs an Output object. The method initializes the target attribute, stable items,
+        flexible items, and column values. It processes both stable and flexible items for each rule
+        and updates the corresponding dictionaries.
+
+        The JSON structure is expected to have the following format:
+        [
+            {
+                "target": {
+                    "attribute": "target_attribute",
+                    "undesired": "undesired_value",
+                    "desired": "desired_value"
+                },
+                "support of undesired part": int,
+                "confidence of undesired part": float,
+                "support of desired part": int,
+                "confidence of desired part": float,
+                "uplift": float,
+                "stable": [
+                    {
+                        "attribute": "attribute_name",
+                        "value": "attribute_value"
+                    },
+                    ...
+                ],
+                "flexible": [
+                    {
+                        "attribute": "attribute_name",
+                        "undesired": "undesired_value",
+                        "desired": "desired_value"
+                    },
+                    ...
+                ]
+            },
+            ...
+        ]
+
+        The method ensures that each attribute-value pair is assigned a unique index and maintains
+        the mappings in the column_values dictionary. The stable_items_binding and flexible_items_binding
+        dictionaries are updated accordingly.
+
+        Example
+        -------
+        json_data = '''
+        [
+            {
+                "target": {
+                    "attribute": "target",
+                    "undesired": "no",
+                    "desired": "yes"
+                },
+                "support of undesired part": 10,
+                "confidence of undesired part": 0.5,
+                "support of desired part": 20,
+                "confidence of desired part": 0.8,
+                "uplift": 0.3,
+                "stable": [
+                    {"attribute": "age", "value": "young"},
+                    {"attribute": "income", "value": "high"}
+                ],
+                "flexible": [
+                    {"attribute": "education", "undesired": "low", "desired": "high"}
+                ]
+            }
+        ]
+        '''
+        input_obj = Input()
+        output = input_obj.import_action_rules(json_data)
         """
         rules = json.loads(json_data)
         action_rules = []

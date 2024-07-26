@@ -40,14 +40,23 @@ class ActionRules:
         The minimum confidence for the desired state.
     verbose : bool, optional
         If True, enables verbose output.
-    rules : Rules, optional
+    rules : Optional[Rules], optional
         Stores the generated rules.
-    output : Output, optional
+    output : Optional[Output], optional
         Stores the generated action rules.
+    np : Optional[ModuleType], optional
+        The numpy or cupy module used for array operations.
+    pd : Optional[ModuleType], optional
+        The pandas or cudf module used for DataFrame operations.
+    is_gpu_np : bool
+        Indicates whether GPU-accelerated numpy (cupy) is used.
+    is_gpu_pd : bool
+        Indicates whether GPU-accelerated pandas (cudf) is used.
 
     Methods
     -------
-    fit(data, stable_attributes, flexible_attributes, target, undesired_state, desired_state)
+    fit(data, stable_attributes, flexible_attributes, target, undesired_state, desired_state, use_sparse_matrix=False,
+    use_gpu=False)
         Generates action rules based on the provided dataset and parameters.
     get_bindings(data, stable_attributes, flexible_attributes, target)
         Binds attributes to corresponding columns in the dataset.
@@ -57,6 +66,8 @@ class ActionRules:
         Splits the dataset into tables based on target item bindings.
     get_rules()
         Returns the generated action rules if available.
+    predict(frame_row)
+        Predicts recommended actions based on the provided row of data.
     """
 
     def __init__(
@@ -88,6 +99,10 @@ class ActionRules:
             The minimum confidence for the desired state.
         verbose : bool, optional
             If True, enables verbose output. Default is False.
+
+        Notes
+        -----
+        The `verbose` parameter can be used to enable detailed output during the rule generation process.
         """
         self.min_stable_attributes = min_stable_attributes
         self.min_flexible_attributes = min_flexible_attributes
@@ -142,7 +157,7 @@ class ActionRules:
 
     def set_array_library(self, use_gpu: bool, df: Union['cudf.DataFrame', 'pandas.DataFrame']):
         """
-        Return the appropriate DataFrame library (cuDF or pandas) based on the user's preference and availability.
+        Set the appropriate array and DataFrame libraries (cuDF or pandas) based on the user's preference.
 
         Parameters
         ----------
@@ -150,12 +165,6 @@ class ActionRules:
             Indicates whether to use GPU (cuDF) for data processing if available.
         df : Union[cudf.DataFrame, pandas.DataFrame]
             The DataFrame to convert.
-
-        Returns
-        -------
-        tuple
-            The CuPy library if `use_gpu` is True and CuPy is available; otherwise, the Numpy library.
-            The cuDF library if `use_gpu` is True and cuDF is available; otherwise, the Pandas library.
 
         Raises
         ------
@@ -166,6 +175,11 @@ class ActionRules:
         --------
         UserWarning
             If `use_gpu` is True but cuDF is not available, a warning is issued indicating fallback to pandas.
+
+        Notes
+        -----
+        This method determines whether to use GPU-accelerated libraries for processing data, falling back to CPU-based
+        libraries if necessary.
         """
         if use_gpu:
             try:
@@ -210,20 +224,16 @@ class ActionRules:
         self.is_gpu_np = is_gpu_np
         self.is_gpu_pd = is_gpu_pd
 
-    def df_to_array(
-        self, df: Union['cudf.DataFrame', 'pandas.DataFrame'], use_gpu: bool = False, use_sparse_matrix: bool = False
-    ) -> tuple:
+    def df_to_array(self, df: Union['cudf.DataFrame', 'pandas.DataFrame'], use_sparse_matrix: bool = False) -> tuple:
         """
-        Convert a pandas DataFrame to a numpy array or a CuPy array.
+        Convert a DataFrame to a numpy or CuPy array.
 
         Parameters
         ----------
         df : Union[cudf.DataFrame, pandas.DataFrame]
             The DataFrame to convert.
-        use_gpu : bool, optional
-            If True, the data will be converted to a GPU array using CuPy. Default is False.
         use_sparse_matrix : bool, optional
-            If True, rhe sparse matrix is used. Default is False.
+            If True, a sparse matrix is used. Default is False.
 
         Returns
         -------
@@ -284,7 +294,7 @@ class ActionRules:
 
         Parameters
         ----------
-        data : pd.DataFrame
+        data : Union[cudf.DataFrame, pandas.DataFrame]
             The input DataFrame containing the data to be encoded.
         stable_attributes : list
             List of stable attributes to be one-hot encoded.
@@ -295,7 +305,7 @@ class ActionRules:
 
         Returns
         -------
-        pd.DataFrame
+        Union[cudf.DataFrame, pandas.DataFrame]
             A DataFrame with the specified attributes one-hot encoded.
 
         Notes
@@ -343,21 +353,26 @@ class ActionRules:
             The undesired state of the target attribute.
         target_desired_state : str
             The desired state of the target attribute.
-        use_gpu : bool, optional
-            Use GPU (cuDF) for data processing if available.
         use_sparse_matrix : bool, optional
-            If True, rhe sparse matrix is used. Default is False.
+            If True, a sparse matrix is used. Default is False.
+        use_gpu : bool, optional
+            Use GPU (cuDF) for data processing if available. Default is False.
 
         Raises
         ------
         RuntimeError
             If the model has already been fitted.
+
+        Notes
+        -----
+        This method performs one-hot encoding on the specified attributes, converts the DataFrame to an array,
+        and generates action rules by iterating over candidate rules and pruning them based on the given parameters.
         """
         if self.output is not None:
             raise RuntimeError("The model is already fit.")
         self.set_array_library(use_gpu, data)
         data = self.one_hot_encode(data, stable_attributes, flexible_attributes, target)
-        data, columns = self.df_to_array(data, use_gpu, use_sparse_matrix)
+        data, columns = self.df_to_array(data, use_sparse_matrix)
 
         stable_items_binding, flexible_items_binding, target_items_binding, column_values = self.get_bindings(
             columns, stable_attributes, flexible_attributes, target
@@ -368,7 +383,7 @@ class ActionRules:
             print(self.count_max_nodes(stable_items_binding, flexible_items_binding))
             print('')
         stop_list = self.get_stop_list(stable_items_binding, flexible_items_binding)
-        frames = self.get_split_tables(data, target_items_binding, target, use_gpu, use_sparse_matrix)
+        frames = self.get_split_tables(data, target_items_binding, target, use_sparse_matrix)
         undesired_state = columns.index(target + '_<item_target>_' + str(target_undesired_state))
         desired_state = columns.index(target + '_<item_target>_' + str(target_desired_state))
 
@@ -434,6 +449,8 @@ class ActionRules:
 
         Parameters
         ----------
+        columns : list
+            List of column names in the dataset.
         stable_attributes : list
             List of stable attributes.
         flexible_attributes : list
@@ -445,6 +462,11 @@ class ActionRules:
         -------
         tuple
             A tuple containing the bindings for stable attributes, flexible attributes, and target items.
+
+        Notes
+        -----
+        The method generates mappings from column indices to attribute values for stable, flexible, and target
+        attributes.
         """
         stable_items_binding = defaultdict(lambda: [])
         flexible_items_binding = defaultdict(lambda: [])
@@ -492,6 +514,10 @@ class ActionRules:
         -------
         list
             A list of stop combinations.
+
+        Notes
+        -----
+        The stop list is generated by creating pairs of stable item indices and ensuring flexible items do not repeat.
         """
         stop_list = []
         for items in stable_items_binding.values():
@@ -506,7 +532,6 @@ class ActionRules:
         data: Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix', 'scipy.sparse.csr_matrix'],
         target_items_binding: dict,
         target: str,
-        use_gpu: bool = False,
         use_sparse_matrix: bool = False,
     ) -> dict:
         """
@@ -520,15 +545,17 @@ class ActionRules:
             Dictionary containing bindings for target items.
         target : str
             The target attribute.
-        use_gpu : bool, optional
-            Use GPU for data processing if available.
         use_sparse_matrix : bool, optional
-            If True, rhe sparse matrix is used. Default is False.
+            If True, a sparse matrix is used. Default is False.
 
         Returns
         -------
         dict
             A dictionary containing the split tables.
+
+        Notes
+        -----
+        The method creates masks for the target items and splits the data accordingly.
         """
         frames = {}
         for item in target_items_binding[target]:
@@ -550,8 +577,12 @@ class ActionRules:
 
         Returns
         -------
-        Optional[Output]
-            The generated action rules, or None if no rules have been generated.
+        Output
+            The generated action rules.
+
+        Notes
+        -----
+        This method returns the `Output` object containing the generated action rules.
         """
         if self.output is None:
             raise RuntimeError("The model is not fit.")

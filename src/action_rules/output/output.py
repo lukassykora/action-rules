@@ -13,13 +13,19 @@ class Output:
         List containing the action rules.
     target : str
         The target attribute for the action rules.
+    stable_cols : list
+        List of indices for stable columns.
+    flexible_cols : list
+        List of indices for flexible columns.
+    column_values : dict
+        Dictionary containing the values of the columns.
 
     Methods
     -------
     get_ar_notation()
         Generate a string representation of the action rules in a human-readable format.
     get_export_notation()
-        Generate a list of dictionaries representing the action rules for export.
+        Generate a JSON string of dictionaries representing the action rules for export.
     get_pretty_ar_notation()
         Generate a list of text strings representing the action rules.
     """
@@ -46,7 +52,13 @@ class Output:
         flexible_items_binding : dict
             Dictionary containing bindings for flexible items.
         column_values : dict
-            Dictionary the values of the columns.
+            Dictionary containing the values of the columns.
+
+        Notes
+        -----
+        The constructor initializes the Output object by setting the provided action rules, target attribute,
+        stable items, flexible items, and column values. It flattens the stable and flexible items bindings to
+        create lists of indices for stable and flexible columns.
         """
         self.action_rules = action_rules
         self.target = target
@@ -62,6 +74,12 @@ class Output:
         -------
         str
             String representation of the action rules.
+
+        Notes
+        -----
+        This method constructs a human-readable string representation of the action rules. Each rule is
+        formatted to show the attribute-value conditions and transitions. The representation includes
+        the support and confidence values for both the undesired and desired parts, as well as the uplift.
         """
         ar_notation = []
         for action_rule in self.action_rules:
@@ -109,12 +127,18 @@ class Output:
 
     def get_export_notation(self):
         """
-        Generate a list of dictionaries representing the action rules for export.
+        Generate a JSON string of dictionaries representing the action rules for export.
 
         Returns
         -------
-        list
-            List of dictionaries representing the action rules.
+        str
+            JSON string of dictionaries representing the action rules.
+
+        Notes
+        -----
+        This method constructs a list of dictionaries where each dictionary represents an action rule.
+        The dictionaries include attributes for stable and flexible items, as well as the target attribute,
+        support, confidence, and uplift values. The list is then converted to a JSON string for export.
         """
         rules = []
         for ar_dict in self.action_rules:
@@ -152,6 +176,12 @@ class Output:
         -------
         list
             List of text strings representing the action rules.
+
+        Notes
+        -----
+        This method constructs a list of text strings where each string represents an action rule in a
+        readable format. The format includes conditions and transitions for each attribute, along with
+        the target attribute change, support, confidence, and uplift values.
         """
         rules = []
         for ar_dict in self.action_rules:

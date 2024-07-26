@@ -109,7 +109,7 @@ def test_df_to_array(action_rules):
     """
     df = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]})
     action_rules.set_array_library(use_gpu=False, df=df)
-    data, columns = action_rules.df_to_array(df, use_gpu=False)
+    data, columns = action_rules.df_to_array(df)
     np.testing.assert_array_equal(data, np.array([[1, 2, 3], [4, 5, 6]], dtype=np.uint8))
     assert columns == ['A', 'B']
 
@@ -357,4 +357,4 @@ def test_predict(action_rules):
     assert result.iloc[0]['ActionRules_DesiredSupport'] == 1
     assert result.iloc[0]['ActionRules_UndesiredConfidence'] == 1.0
     assert result.iloc[0]['ActionRules_DesiredConfidence'] == 1.0
-    assert result.iloc[0]['ActionRules_Uplift'] == 1.0
+    assert result.iloc[0]['ActionRules_Uplift'] == 1 / 3  # one is changed, 3 transactions
