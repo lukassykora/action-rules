@@ -386,7 +386,7 @@ class ActionRules:
             }
         ]
         k = 0
-        self.rules = Rules(undesired_state, desired_state, columns)
+        self.rules = Rules(undesired_state, desired_state, columns, data.shape[1])
         candidate_generator = CandidateGenerator(
             frames,
             self.min_stable_attributes,

@@ -19,6 +19,8 @@ class Rules:
         The desired state of the target attribute.
     action_rules : list
         List to store generated action rules.
+    count_transactions : int
+        The number of transactions in data.
 
     Methods
     -------
@@ -34,7 +36,7 @@ class Rules:
         Calculate the uplift of an action rule.
     """
 
-    def __init__(self, undesired_state: str, desired_state: str, columns: pd.core.indexes.base.Index):
+    def __init__(self, undesired_state: str, desired_state: str, columns: pd.core.indexes.base.Index, count_transactions: int):
         """
         Initialize the Rules class with the specified undesired and desired states.
 
@@ -52,6 +54,7 @@ class Rules:
         self.action_rules = []  # type: list
         self.undesired_prefixes_without_conf = set()  # type: set
         self.desired_prefixes_without_conf = set()  # type: set
+        self.count_transactions = count_transactions
 
     def add_prefix_without_conf(self, prefix: tuple, is_desired: bool):
         """
@@ -183,6 +186,4 @@ class Rules:
             (undesired_support / undesired_confidence) * desired_confidence -
             (undesired_support / undesired_confidence - undesired_support).
         """
-        return (undesired_support / undesired_confidence) * desired_confidence - (
-            undesired_support / undesired_confidence - undesired_support
-        )
+        return ((desired_confidence - (1-undesired_confidence)) * undesired_support) / self.count_transactions
