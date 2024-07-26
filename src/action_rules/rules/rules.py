@@ -2,8 +2,6 @@
 
 from collections import defaultdict
 
-import pandas as pd
-
 
 class Rules:
     """
@@ -17,11 +15,21 @@ class Rules:
         The undesired state of the target attribute.
     desired_state : str
         The desired state of the target attribute.
+    columns : list
+        List of columns in the dataset.
     action_rules : list
         List to store generated action rules.
+    undesired_prefixes_without_conf : set
+        Set to store prefixes of undesired states without conflicts.
+    desired_prefixes_without_conf : set
+        Set to store prefixes of desired states without conflicts.
+    count_transactions : int
+        The number of transactions in the data.
 
     Methods
     -------
+    add_prefix_without_conf(prefix, is_desired)
+        Add a prefix to the set of prefixes without conflicts.
     add_classification_rules(new_ar_prefix, itemset_prefix, undesired_states, desired_states)
         Add classification rules for undesired and desired states.
     generate_action_rules()
@@ -29,14 +37,14 @@ class Rules:
     prune_classification_rules(k, stop_list)
         Prune classification rules based on their length and update the stop list.
     calculate_confidence(support, opposite_support)
-        Calculate the confidence of the rule.
+        Calculate the confidence of a rule.
     calculate_uplift(undesired_support, undesired_confidence, desired_confidence)
         Calculate the uplift of an action rule.
     """
 
-    def __init__(self, undesired_state: str, desired_state: str, columns: pd.core.indexes.base.Index):
+    def __init__(self, undesired_state: str, desired_state: str, columns: list, count_transactions: int):
         """
-        Initialize the Rules class with the specified undesired and desired states.
+        Initialize the Rules class with the specified undesired and desired states, columns, and transaction count.
 
         Parameters
         ----------
@@ -44,6 +52,15 @@ class Rules:
             The undesired state of the target attribute.
         desired_state : str
             The desired state of the target attribute.
+        columns : list
+            List of columns in the dataset.
+        count_transactions : int
+            The number of transactions in the data.
+
+        Notes
+        -----
+        The classification_rules attribute is initialized as a defaultdict with a lambda function that creates
+        dictionaries for 'desired' and 'undesired' states.
         """
         self.classification_rules = defaultdict(lambda: {'desired': [], 'undesired': []})  # type: defaultdict
         self.undesired_state = undesired_state
@@ -52,6 +69,7 @@ class Rules:
         self.action_rules = []  # type: list
         self.undesired_prefixes_without_conf = set()  # type: set
         self.desired_prefixes_without_conf = set()  # type: set
+        self.count_transactions = count_transactions
 
     def add_prefix_without_conf(self, prefix: tuple, is_desired: bool):
         """
@@ -63,6 +81,11 @@ class Rules:
             The prefix to be added.
         is_desired : bool
             If True, add the prefix to the desired prefixes set; otherwise, add it to the undesired prefixes set.
+
+        Notes
+        -----
+        This method is useful for keeping track of prefixes that have no conflicting rules and can be
+        used directly in rule generation.
         """
         if is_desired:
             self.desired_prefixes_without_conf.add(prefix)
@@ -80,9 +103,15 @@ class Rules:
         itemset_prefix : tuple
             Prefix of the itemset.
         undesired_states : list
-            List of undesired states.
+            List of dictionaries containing undesired state information.
         desired_states : list
-            List of desired states.
+            List of dictionaries containing desired state information.
+
+        Notes
+        -----
+        This method updates the classification_rules attribute with new rules based on the provided
+        undesired and desired states. Each state is represented as a dictionary containing item, support,
+        confidence, and target information.
         """
         for undesired_item in undesired_states:
             new_itemset_prefix = itemset_prefix + (undesired_item['item'],)
@@ -106,7 +135,15 @@ class Rules:
             )
 
     def generate_action_rules(self):
-        """Generate action rules from classification rules."""
+        """
+        Generate action rules from classification rules.
+
+        Notes
+        -----
+        This method creates action rules by combining classification rules for undesired and desired states.
+        The uplift for each action rule is calculated using the `calculate_uplift` method and the result is
+        stored in the action_rules attribute.
+        """
         for attribute_prefix, rules in self.classification_rules.items():
             for desired_rule in rules['desired']:
                 for undesired_rule in rules['undesired']:
@@ -127,6 +164,11 @@ class Rules:
             Length of the attribute prefix.
         stop_list : list
             List of prefixes to stop generating rules for.
+
+        Notes
+        -----
+        This method removes classification rules whose prefix length equals k and either desired or undesired
+        states are empty. The corresponding prefixes are also added to the stop_list to avoid further rule generation.
         """
         del_prefixes = []
         for attribute_prefix, rules in self.classification_rules.items():
@@ -144,7 +186,7 @@ class Rules:
 
     def calculate_confidence(self, support, opposite_support):
         """
-        Calculate the confidence of an action rule.
+        Calculate the confidence of a rule.
 
         Parameters
         ----------
@@ -158,6 +200,11 @@ class Rules:
         float
             The confidence value calculated as support / (support + opposite_support).
             Returns 0 if the sum of support and opposite_support is 0.
+
+        Notes
+        -----
+        Confidence is a measure of the reliability of a rule. A higher confidence indicates a stronger
+        association between the conditions of the rule and the target state.
         """
         if support + opposite_support == 0:
             return 0
@@ -180,9 +227,11 @@ class Rules:
         -------
         float
             The uplift value calculated as:
-            (undesired_support / undesired_confidence) * desired_confidence -
-            (undesired_support / undesired_confidence - undesired_support).
+            ((desired_confidence - (1 - undesired_confidence)) * undesired_support) / self.count_transactions.
+
+        Notes
+        -----
+        Uplift measures the increase in the probability of achieving the desired state when applying the action rule
+        compared to not applying it. It is used to assess the effectiveness of the rule.
         """
-        return (undesired_support / undesired_confidence) * desired_confidence - (
-            undesired_support / undesired_confidence - undesired_support
-        )
+        return ((desired_confidence - (1 - undesired_confidence)) * undesired_support) / self.count_transactions

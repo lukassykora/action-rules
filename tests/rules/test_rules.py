@@ -10,7 +10,10 @@ from action_rules.rules.rules import Rules
 def rules():
     """Fixture for Rules instance."""
     return Rules(
-        'status_<item_target>_default', 'status_<item_target>_paid', ['age_<item_stable>_30', 'age_<item_stable>_40']
+        'status_<item_target>_default',
+        'status_<item_target>_paid',
+        ['age_<item_stable>_30', 'age_<item_stable>_40'],
+        20,
     )
 
 
@@ -57,4 +60,4 @@ def test_calculate_confidence(rules):
 def test_calculate_uplift(rules):
     """Test the calculate_uplift method of Rules."""
     uplift = rules.calculate_uplift(10, 0.8, 0.6)
-    assert uplift == 5.0
+    assert uplift == 0.2

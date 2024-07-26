@@ -38,24 +38,28 @@ class CandidateGenerator:
         The desired state of the target attribute.
     rules : Rules
         Rules object to store the generated classification rules.
+    use_sparse_matrix : bool
+        If True, sparse matrices are used for calculations.
 
     Methods
     -------
     generate_candidates(ar_prefix, itemset_prefix, stable_items_binding, flexible_items_binding, undesired_mask,
-    desired_mask, actionable_attributes, stop_list, stop_list_itemset, undesired_state, desired_state, verbose=False)
+                        desired_mask, actionable_attributes, stop_list, stop_list_itemset, undesired_state,
+                        desired_state, verbose=False)
         Generate candidate action rules.
     get_frames(undesired_mask, desired_mask, undesired_state, desired_state)
         Get the frames for the undesired and desired states.
     reduce_candidates_by_min_attributes(k, actionable_attributes, stable_items_binding, flexible_items_binding)
         Reduce the candidate sets based on minimum attributes.
     process_stable_candidates(ar_prefix, itemset_prefix, reduced_stable_items_binding, stop_list, stable_candidates,
-    undesired_frame, desired_frame, new_branches, verbose)
+                              undesired_frame, desired_frame, new_branches, verbose)
         Process stable candidates to generate new branches.
     process_flexible_candidates(ar_prefix, itemset_prefix, reduced_flexible_items_binding, stop_list, stop_list_itemset,
-    flexible_candidates, undesired_frame, desired_frame, actionable_attributes, new_branches, verbose)
+                                flexible_candidates, undesired_frame, desired_frame, actionable_attributes,
+                                new_branches, verbose)
         Process flexible candidates to generate new branches.
     process_items(attribute, items, itemset_prefix, stop_list_itemset, undesired_frame, desired_frame,
-    flexible_candidates, verbose)
+                  flexible_candidates, verbose)
         Process items to generate states and counts.
     update_new_branches(new_branches, stable_candidates, flexible_candidates)
         Update new branches with stable and flexible candidates.
@@ -103,7 +107,13 @@ class CandidateGenerator:
         rules : Rules
             Rules object to store the generated classification rules.
         use_sparse_matrix : bool, optional
-            If True, rhe sparse matrix is used. Default is False.
+            If True, sparse matrices are used. Default is False.
+
+        Notes
+        -----
+        The CandidateGenerator class is designed to facilitate the generation of candidate action rules by
+        iterating over combinations of stable and flexible attributes. The class maintains a reference to the
+        rules object where generated rules are stored and supports both dense and sparse matrix operations.
         """
         self.frames = frames
         self.min_stable_attributes = min_stable_attributes
@@ -166,6 +176,13 @@ class CandidateGenerator:
         -------
         list
             List of new branches generated.
+
+        Notes
+        -----
+        This method generates candidate action rules by processing both stable and flexible attributes.
+        It first reduces the candidate sets based on the minimum attributes, then processes stable and
+        flexible candidates to generate new branches. The new branches are updated with the candidates
+        and returned.
         """
         k = len(itemset_prefix) + 1
         reduced_stable_items_binding, reduced_flexible_items_binding = self.reduce_candidates_by_min_attributes(
@@ -223,10 +240,10 @@ class CandidateGenerator:
         Parameters
         ----------
         undesired_mask : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix',
-        'scipy.sparse.csr_matrix', None]
+                               'scipy.sparse.csr_matrix', None]
             Mask for the undesired state.
         desired_mask : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix',
-        'scipy.sparse.csr_matrix', None]
+                            'scipy.sparse.csr_matrix', None]
             Mask for the desired state.
         undesired_state : int
             The undesired state of the target attribute.
@@ -237,6 +254,12 @@ class CandidateGenerator:
         -------
         tuple
             Tuple containing the frames for the undesired and desired states.
+
+        Notes
+        -----
+        This method retrieves the frames for the undesired and desired states using the provided masks.
+        If no masks are provided, the method returns the frames as they are stored. If masks are provided,
+        the method applies them to the frames, performing element-wise multiplication to filter the data.
         """
         if undesired_mask is None:
             return self.frames[undesired_state], self.frames[desired_state]
@@ -277,6 +300,12 @@ class CandidateGenerator:
         -------
         tuple
             Tuple containing the reduced stable and flexible items bindings.
+
+        Notes
+        -----
+        This method reduces the candidate sets by removing attributes that do not meet the minimum
+        number of stable or flexible attributes required. The reduction is based on the length of the
+        itemset prefix plus one (k) and the number of actionable attributes.
         """
         number_of_stable_attributes = len(stable_items_binding) - (self.min_stable_attributes - k)
         if k > self.min_stable_attributes:
@@ -325,15 +354,22 @@ class CandidateGenerator:
         stable_candidates : dict
             Dictionary containing stable candidates.
         undesired_frame : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix',
-        'scipy.sparse.csr_matrix']
+                                'scipy.sparse.csr_matrix']
             Data frame for the undesired state.
         desired_frame : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix',
-        'scipy.sparse.csr_matrix']
+                              'scipy.sparse.csr_matrix']
             Data frame for the desired state.
         new_branches : list
             List of new branches generated.
         verbose : bool
             If True, enables verbose output.
+
+        Notes
+        -----
+        This method processes stable candidates by iterating over the reduced stable items bindings.
+        It generates new action rule prefixes and calculates support for the undesired and desired states.
+        If the support values meet the minimum thresholds, new branches are created and added to the
+        new branches list.
         """
         for attribute, items in reduced_stable_items_binding.items():
             for item in items:
@@ -394,6 +430,7 @@ class CandidateGenerator:
         -----
         - This function is compatible with both NumPy and CuPy arrays.
         - Ensure that the `item` index is within the bounds of the frame's rows.
+        - For sparse matrices, the sum is computed efficiently by leveraging sparse matrix operations.
         """
         return frame[item].sum()
 
@@ -433,10 +470,10 @@ class CandidateGenerator:
         flexible_candidates : dict
             Dictionary containing flexible candidates.
         undesired_frame : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix',
-        'scipy.sparse.csr_matrix']
+                                'scipy.sparse.csr_matrix']
             Data frame for the undesired state.
         desired_frame : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix',
-        'scipy.sparse.csr_matrix']
+                              'scipy.sparse.csr_matrix']
             Data frame for the desired state.
         actionable_attributes : int
             Number of actionable attributes.
@@ -444,6 +481,14 @@ class CandidateGenerator:
             List of new branches generated.
         verbose : bool
             If True, enables verbose output.
+
+        Notes
+        -----
+        This method processes flexible candidates by iterating over the reduced flexible items bindings.
+        It generates new action rule prefixes and calculates support for the undesired and desired states.
+        If the support values meet the minimum thresholds, new branches are created and added to the
+        new branches list. The method also updates the rules with new classification rules if the
+        number of actionable attributes meets the minimum required.
         """
         for attribute, items in reduced_flexible_items_binding.items():
             new_ar_prefix = ar_prefix + (attribute,)
@@ -517,10 +562,10 @@ class CandidateGenerator:
         stop_list_itemset : list
             List of stop itemsets.
         undesired_frame : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix',
-        'scipy.sparse.csr_matrix']
+                                'scipy.sparse.csr_matrix']
             Data frame for the undesired state.
         desired_frame : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix',
-        'scipy.sparse.csr_matrix']
+                              'scipy.sparse.csr_matrix']
             Data frame for the desired state.
         flexible_candidates : dict
             Dictionary containing flexible candidates.
@@ -531,6 +576,13 @@ class CandidateGenerator:
         -------
         tuple
             Tuple containing undesired states, desired states, undesired count, and desired count.
+
+        Notes
+        -----
+        This method processes items by iterating over the list of items for a given attribute. It calculates
+        support and confidence values for both undesired and desired states, updating the rules with new
+        classification rules if the confidence thresholds are met. The method also removes items that do not
+        meet the minimum support thresholds from the flexible candidates and updates the stop list accordingly.
         """
         undesired_states = []
         desired_states = []
@@ -586,6 +638,12 @@ class CandidateGenerator:
             Dictionary containing stable candidates.
         flexible_candidates : dict
             Dictionary containing flexible candidates.
+
+        Notes
+        -----
+        This method updates new branches by iterating over stable and flexible candidates. It creates
+        new stable and flexible bindings for each new branch, ensuring that only the relevant candidates
+        are included in the new branches.
         """
         for new_branch in new_branches:
             adding = False
@@ -629,6 +687,12 @@ class CandidateGenerator:
         -------
         bool
             True if the action rule prefix is in the stop list, False otherwise.
+
+        Notes
+        -----
+        This method checks if the action rule prefix is in the stop list by checking for the presence
+        of the last two elements and all but the first element of the prefix in the stop list. If the
+        prefix is found, it is added to the stop list to prevent future processing.
         """
         if ar_prefix[-2:] in stop_list:
             return True
