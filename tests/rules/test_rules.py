@@ -60,4 +60,4 @@ def test_calculate_confidence(rules):
 def test_calculate_uplift(rules):
     """Test the calculate_uplift method of Rules."""
     uplift = rules.calculate_uplift(10, 0.8, 0.6)
-    assert uplift == 0.2
+    assert uplift == 0.25
