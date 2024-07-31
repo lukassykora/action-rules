@@ -103,6 +103,7 @@ $ action-rules --min_stable_attributes 2 --min_flexible_attributes 1 --min_undes
 * [Scalene Profiling](https://github.com/lukassykora/action-rules/blob/main/notebooks/profiling/plot.ipynb)
 * [GPU Memory Usage - Sparse vs. Dense Matrix](https://github.com/lukassykora/action-rules/blob/main/notebooks/gpu_sparse_vs_dense/process_logs.ipynb)
 * [CPU Usage](https://github.com/lukassykora/action-rules/blob/main/notebooks/cpu_cores/cpu_usage.ipynb)
+* [Compare the Action-Rules package with ActionRulesDiscovery package](https://github.com/lukassykora/action-rules/blob/main/notebooks/Comparison.ipynb) - link to ActionRulesDiscovery package: <https://github.com/lukassykora/actionrules>
 
 ## Credits
 
