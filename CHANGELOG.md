@@ -123,3 +123,7 @@
 * Uplift fixed.
 * Docstrings and notations.
 * Completely finished.
+
+## [1.0.1] - 2024-07-31
+
+* Uplift fixed.
