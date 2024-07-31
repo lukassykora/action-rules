@@ -131,3 +131,7 @@
 ## [1.0.2] - 2024-07-31
 
 * Profiling.
+
+## [1.0.3] - 2024-07-31
+
+* Comparison with another package.
