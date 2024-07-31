@@ -18,6 +18,12 @@ The package for action rules mining using Action-Apriori (Apriori Modified for A
 $ pip install action-rules
 ```
 
+For command-line interface (CLI) usage, the action-rules package must be installed using pipx:
+``` console
+$ pipx install action-rules
+```
+
+
 ## Features
 
 ### Action Rules API
