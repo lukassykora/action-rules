@@ -97,6 +97,10 @@ $ action-rules --min_stable_attributes 2 --min_flexible_attributes 1 --min_undes
 * [Titanic Dataset (GPU accelerated)](https://github.com/lukassykora/action-rules/blob/main/notebooks/Example.ipynb)
 * [Customer Churn (easy workflow)](https://github.com/lukassykora/action-rules/blob/main/notebooks/ExampleCustomerChurn.ipynb)
 
+## Performance
+
+* [Customer Churn (GPU vs. CPU, sparse matrix vs. dense matrix, Pandas vs. cuDF)](https://github.com/lukassykora/action-rules/blob/main/notebooks/Performance.ipynb)
+
 ## Credits
 
 This package was created with [Cookiecutter](https://github.com/audreyr/cookiecutter) and
