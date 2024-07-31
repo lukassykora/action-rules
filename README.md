@@ -100,6 +100,7 @@ $ action-rules --min_stable_attributes 2 --min_flexible_attributes 1 --min_undes
 ## Performance
 
 * [Customer Churn (GPU vs. CPU, sparse matrix vs. dense matrix, Pandas vs. cuDF)](https://github.com/lukassykora/action-rules/blob/main/notebooks/Performance.ipynb)
+* [Scalene Profiling](https://github.com/lukassykora/action-rules/blob/main/notebooks/profiling/plot.ipynb)
 
 ## Credits
 
