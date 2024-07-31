@@ -18,6 +18,12 @@ The package for action rules mining using Action-Apriori (Apriori Modified for A
 $ pip install action-rules
 ```
 
+For command-line interface (CLI) usage, the action-rules package must be installed using pipx:
+``` console
+$ pipx install action-rules
+```
+
+
 ## Features
 
 ### Action Rules API
@@ -86,9 +92,17 @@ print(action_rules.get_rules().get_export_notation())
 $ action-rules --min_stable_attributes 2 --min_flexible_attributes 1 --min_undesired_support 1 --min_undesired_confidence 0.5 --min_desired_support 1 --min_desired_confidence 0.5 --csv_path 'data.csv' --stable_attributes 'Sex, Age' --flexible_attributes 'Class, Embarked' --target 'Survived' --undesired_state '0' --desired_state '1' --output_json_path 'output.json'
 ```
 
-## Jupyter Notebook Example
+## Jupyter Notebook Examples
 
-<https://github.com/lukassykora/action-rules/blob/main/notebooks/Example.ipynb>
+* [Titanic Dataset (GPU accelerated)](https://github.com/lukassykora/action-rules/blob/main/notebooks/Example.ipynb)
+* [Customer Churn (easy workflow)](https://github.com/lukassykora/action-rules/blob/main/notebooks/ExampleCustomerChurn.ipynb)
+
+## Performance
+
+* [Customer Churn (GPU vs. CPU, sparse matrix vs. dense matrix, Pandas vs. cuDF)](https://github.com/lukassykora/action-rules/blob/main/notebooks/Performance.ipynb)
+* [Scalene Profiling](https://github.com/lukassykora/action-rules/blob/main/notebooks/profiling/plot.ipynb)
+* [GPU Memory Usage - Sparse vs. Dense Matrix](https://github.com/lukassykora/action-rules/blob/main/notebooks/gpu_sparse_vs_dense/process_logs.ipynb)
+* [CPU Usage](https://github.com/lukassykora/action-rules/blob/main/notebooks/cpu_cores/cpu_usage.ipynb)
 
 ## Credits
 
