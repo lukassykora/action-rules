@@ -638,7 +638,7 @@ class ActionRules:
             action_rules = self.output.action_rules.get()
         else:
             action_rules = self.output.action_rules
-        for i, action_rule in action_rules:
+        for i, action_rule in enumerate(action_rules):
             if set(action_rule['undesired']['itemset']) <= set(new_values):
                 predicted_row = frame_row.copy()
                 for recommended in set(action_rule['desired']['itemset']) - set(new_values):
