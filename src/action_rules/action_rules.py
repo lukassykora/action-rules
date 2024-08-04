@@ -634,7 +634,11 @@ class ActionRules:
             values.append(list(column_values.keys())[list(column_values.values()).index(index_value_tuple)])
         new_values = tuple(values)
         predicted = []
-        for i, action_rule in enumerate(self.output.action_rules):
+        if self.is_gpu_np:
+            action_rules = self.output.action_rules.get()
+        else:
+            action_rules = self.output.action_rules
+        for i, action_rule in action_rules:
             if set(action_rule['undesired']['itemset']) <= set(new_values):
                 predicted_row = frame_row.copy()
                 for recommended in set(action_rule['desired']['itemset']) - set(new_values):

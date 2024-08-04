@@ -135,3 +135,7 @@
 ## [1.0.3] - 2024-07-31
 
 * Comparison with another package.
+
+## [1.0.4] - 2024-07-04
+
+* Fix predict method for cupy
