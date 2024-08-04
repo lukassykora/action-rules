@@ -432,7 +432,7 @@ class CandidateGenerator:
         - Ensure that the `item` index is within the bounds of the frame's rows.
         - For sparse matrices, the sum is computed efficiently by leveraging sparse matrix operations.
         """
-        return frame[item].sum()
+        return int(frame[item].sum())
 
     def process_flexible_candidates(
         self,
@@ -593,8 +593,8 @@ class CandidateGenerator:
             if self.in_stop_list(itemset_prefix + (item,), stop_list_itemset):
                 continue
 
-            undesired_support = undesired_frame[item].sum()
-            desired_support = desired_frame[item].sum()
+            undesired_support = self.get_support(undesired_frame, item)
+            desired_support = self.get_support(desired_frame, item)
 
             if verbose:
                 print('SUPPORT for: ' + str(itemset_prefix + (item,)))
