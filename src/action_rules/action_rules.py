@@ -315,14 +315,20 @@ class ActionRules:
         single DataFrame.
         """
         data = data.astype(str)
-        data_stable = self.pd.get_dummies(  # type: ignore
-            data[stable_attributes], sparse=False, prefix_sep='_<item_stable>_'
-        )
-        data_flexible = self.pd.get_dummies(  # type: ignore
-            data[flexible_attributes], sparse=False, prefix_sep='_<item_flexible>_'
-        )
+        to_concat = []
+        if len(stable_attributes) > 0:
+            data_stable = self.pd.get_dummies(  # type: ignore
+                data[stable_attributes], sparse=False, prefix_sep='_<item_stable>_'
+            )
+            to_concat.append(data_stable)
+        if len(flexible_attributes) > 0:
+            data_flexible = self.pd.get_dummies(  # type: ignore
+                data[flexible_attributes], sparse=False, prefix_sep='_<item_flexible>_'
+            )
+            to_concat.append(data_flexible)
         data_target = self.pd.get_dummies(data[[target]], sparse=False, prefix_sep='_<item_target>_')  # type: ignore
-        data = self.pd.concat([data_stable, data_flexible, data_target], axis=1)  # type: ignore
+        to_concat.append(data_target)
+        data = self.pd.concat(to_concat, axis=1)  # type: ignore
         return data
 
     def fit(
