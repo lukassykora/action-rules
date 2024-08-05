@@ -136,6 +136,10 @@
 
 * Comparison with another package.
 
-## [1.0.4] - 2024-07-04
+## [1.0.4] - 2024-08-04
 
 * Fix predict method for cupy
+
+## [1.0.5] - 2024-08-05
+
+* Fix empty list of stable attributes

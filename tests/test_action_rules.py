@@ -142,6 +142,29 @@ def test_one_hot_encode(action_rules):
     assert set(encoded_df.columns) == set(expected_columns)
 
 
+def test_one_hot_encode_empty_stable(action_rules):
+    """
+    Test the one_hot_encode method.
+
+    Parameters
+    ----------
+    action_rules : ActionRules
+        The ActionRules instance to test.
+
+    Asserts
+    -------
+    Asserts that the one-hot encoding is correctly applied to the specified attributes.
+    """
+    df = pd.DataFrame({'stable': ['a', 'b', 'a'], 'flexible': ['x', 'y', 'z'], 'target': ['yes', 'no', 'yes']})
+    action_rules.set_array_library(use_gpu=False, df=df)
+    encoded_df = action_rules.one_hot_encode(df, [], [], 'target')
+    expected_columns = [
+        'target_<item_target>_yes',
+        'target_<item_target>_no',
+    ]
+    assert set(encoded_df.columns) == set(expected_columns)
+
+
 def test_get_bindings(action_rules):
     """
     Test the get_bindings method.
