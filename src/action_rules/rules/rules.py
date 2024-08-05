@@ -235,5 +235,6 @@ class Rules:
         Uplift measures the increase in the probability of achieving the desired state when applying the action rule
         compared to not applying it. It is used to assess the effectiveness of the rule.
         """
-        return ((desired_confidence - (1 - undesired_confidence)) * (
-            undesired_support / undesired_confidence)) / self.count_transactions
+        return (
+            (desired_confidence - (1 - undesired_confidence)) * (undesired_support / undesired_confidence)
+        ) / self.count_transactions
