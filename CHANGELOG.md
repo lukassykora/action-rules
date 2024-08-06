@@ -143,3 +143,7 @@
 ## [1.0.5] - 2024-08-05
 
 * Fix empty list of stable attributes
+
+## [1.0.6] - 2024-08-06
+
+* Feature: New fit_onehot
