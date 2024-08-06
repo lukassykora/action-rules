@@ -386,6 +386,8 @@ class ActionRules:
         generation, focusing on the specified attributes and their one-hot encoded forms.
         """
         self.is_onehot = True
+        data = data.copy()
+        data = data.astype('bool')
         new_labels = []
         attributes_stable = set([])
         attribtes_flexible = set([])
