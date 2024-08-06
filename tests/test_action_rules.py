@@ -375,7 +375,7 @@ def test_fit_onehot(action_rules):
         'target_<item_target>_yes',
         'target_<item_target>_no',
     ]
-    assert set(df.columns) == set(expected_columns)
+    assert set(action_rules.rules.columns) == set(expected_columns)
 
     # Check if the correct attributes were passed to the fit method
     assert action_rules.rules is not None
