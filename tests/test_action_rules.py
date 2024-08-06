@@ -319,6 +319,69 @@ def test_fit_raises_error_when_already_fit(action_rules):
         )
 
 
+def test_fit_onehot(action_rules):
+    """
+    Test the fit_onehot method.
+
+    Parameters
+    ----------
+    action_rules : ActionRules
+        The ActionRules instance to test.
+
+    Asserts
+    -------
+    Asserts that the fit_onehot method processes the data correctly and fits the model.
+    """
+    df = pd.DataFrame(
+        {
+            'young': [0, 1, 0, 0],
+            'old': [1, 0, 1, 1],
+            'high': [1, 1, 0, 0],
+            'low': [0, 0, 1, 1],
+            'animals': [1, 1, 1, 0],
+            'toys': [0, 0, 1, 1],
+            'no': [0, 0, 1, 1],
+            'yes': [1, 1, 0, 0],
+        }
+    )
+
+    stable_attributes = {'age': ['young', 'old']}
+    flexible_attributes = {'income': ['high', 'low'], 'hobby': ['animals', 'toys']}
+    target = {'target': ['yes', 'no']}
+
+    action_rules.fit_onehot(
+        data=df,
+        stable_attributes=stable_attributes,
+        flexible_attributes=flexible_attributes,
+        target=target,
+        target_undesired_state='no',
+        target_desired_state='yes',
+        use_sparse_matrix=False,
+        use_gpu=False,
+    )
+
+    # Check that the model has been fitted
+    assert action_rules.output is not None
+    assert isinstance(action_rules.output, Output)
+
+    # Check if the columns were renamed correctly and irrelevant columns removed
+    expected_columns = [
+        'age_<item_stable>_young',
+        'age_<item_stable>_old',
+        'income_<item_flexible>_high',
+        'income_<item_flexible>_low',
+        'hobby_<item_flexible>_animals',
+        'hobby_<item_flexible>_toys',
+        'target_<item_target>_yes',
+        'target_<item_target>_no',
+    ]
+    assert set(df.columns) == set(expected_columns)
+
+    # Check if the correct attributes were passed to the fit method
+    assert action_rules.rules is not None
+    assert len(action_rules.rules.action_rules) > 0  # Rules should have been generated
+
+
 def test_get_rules(action_rules):
     """
     Test the get_rules method.
