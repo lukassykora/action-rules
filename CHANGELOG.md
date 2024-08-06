@@ -147,3 +147,7 @@
 ## [1.0.6] - 2024-08-06
 
 * Feature: New fit_onehot
+
+## [1.0.7] - 2024-08-06
+
+* Fix: Onehot data copy
