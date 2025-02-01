@@ -221,6 +221,29 @@ class Output:
         return rules
 
     def get_dominant_rules(self):
+        """
+        Identify and select the dominant (Pareto-optimal) action rules.
+
+        This method compares action rules based on the union of their 'undesired'
+        and 'desired' itemsets, as well as their 'uplift' values. It applies a
+        Pareto-dominance approach:
+
+        - If the new candidate rule is a superset of a current dominant rule
+          with smaller or equal uplift, the candidate is dominated and not added.
+        - If the new candidate rule is a subset of a current dominant rule
+          with larger or equal uplift, the current dominant rule is dominated
+          and removed.
+        - Otherwise, the new candidate is added to the set of dominant rules.
+
+        After processing all rules, the remaining dominant rules are sorted
+        by 'uplift' in descending order, and the method returns their indices.
+
+        Returns
+        -------
+        list
+            A list of indices representing the dominant (Pareto-optimal)
+            action rules, sorted by uplift in descending order.
+        """
         dominant_rules = []
 
         # Initialize the first candidate rule
@@ -255,7 +278,7 @@ class Output:
             # rule candidates
             if is_add_rule:
                 new_candidate['to_delete'] = False
-                new_candidate['candidate_set'] = candidate_set
+                new_candidate['candidate_set'] = new_candidate_set
                 new_candidate['rule_index'] = idx
                 dominant_rules.append(new_candidate)
             # Remove rules that are not anymore dominant
