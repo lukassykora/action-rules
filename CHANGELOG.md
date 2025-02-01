@@ -151,3 +151,7 @@
 ## [1.0.7] - 2024-08-06
 
 * Fix: Onehot data copy
+
+## [1.0.8] - 2025-00-01
+
+* Feature: Dominant action rules
