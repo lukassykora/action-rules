@@ -219,3 +219,71 @@ class Output:
             )
             rules.append(text)
         return rules
+
+    def get_dominant_rules(self):
+        """
+        Identify and select the dominant (Pareto-optimal) action rules.
+
+        This method compares action rules based on the union of their 'undesired'
+        and 'desired' itemsets, as well as their 'uplift' values. It applies a
+        Pareto-dominance approach:
+
+        - If the new candidate rule is a superset of a current dominant rule
+          with smaller or equal uplift, the candidate is dominated and not added.
+        - If the new candidate rule is a subset of a current dominant rule
+          with larger or equal uplift, the current dominant rule is dominated
+          and removed.
+        - Otherwise, the new candidate is added to the set of dominant rules.
+
+        After processing all rules, the remaining dominant rules are sorted
+        by 'uplift' in descending order, and the method returns their indices.
+
+        Returns
+        -------
+        list
+            A list of indices representing the dominant (Pareto-optimal)
+            action rules, sorted by uplift in descending order.
+        """
+        dominant_rules = []
+
+        # Initialize the first candidate rule
+        first_rule = self.action_rules[0]
+        first_rule['candidate_set'] = set(first_rule['undesired']['itemset']) | set(first_rule['desired']['itemset'])
+        first_rule['rule_index'] = 0
+        first_rule['to_delete'] = False
+        dominant_rules.append(first_rule)
+
+        # Iterate through remaining rules
+        for idx, new_candidate in enumerate(self.action_rules[1:], start=1):
+            new_candidate_set = set(new_candidate['undesired']['itemset']) | set(new_candidate['desired']['itemset'])
+            is_add_rule = True
+            # Compare the new dominant rule candidate with all current dominant rule candidates
+            for dominant_rule in dominant_rules:
+                # If the new candidate is superset of the dominant rule candidate and its uplift is smaller or the same,
+                # the rule is not added to dominant rule candidates
+                if (
+                    dominant_rule['candidate_set'] < new_candidate_set
+                    and dominant_rule['uplift'] >= new_candidate['uplift']
+                ):
+                    is_add_rule = False
+                    break
+                # If the new candidate is subset of the dominant rule candidate and its uplift is higher or the same,
+                # the dominant rule candidate is removed from the dominant rule candidates
+                elif (
+                    dominant_rule['candidate_set'] > new_candidate_set
+                    and dominant_rule['uplift'] <= new_candidate['uplift']
+                ):
+                    dominant_rule['to_delete'] = True
+            # If the candidate rule did not find any rule that would be dominant to its, add the candidate to dominant
+            # rule candidates
+            if is_add_rule:
+                new_candidate['to_delete'] = False
+                new_candidate['candidate_set'] = new_candidate_set
+                new_candidate['rule_index'] = idx
+                dominant_rules.append(new_candidate)
+            # Remove rules that are not anymore dominant
+            dominant_rules = [rule for rule in dominant_rules if not rule['to_delete']]
+        # Sort the action rules from the highest uplift
+        sorted_indices = sorted(dominant_rules, key=lambda x: x["uplift"], reverse=True)
+        important_rules_indices = [rule['rule_index'] for rule in sorted_indices]
+        return important_rules_indices
