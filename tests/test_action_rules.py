@@ -444,3 +444,77 @@ def test_predict(action_rules):
     assert result.iloc[0]['ActionRules_UndesiredConfidence'] == 1.0
     assert result.iloc[0]['ActionRules_DesiredConfidence'] == 1.0
     assert result.iloc[0]['ActionRules_Uplift'] == 1 / 3  # one is changed, 3 transactions
+
+
+def test_remap_utility_tables(action_rules):
+    """
+    Test the remap_utility_tables method.
+
+    The intrinsic utility table keys are tuples in the format (Attribute, Value), and the transition
+    utility table keys are tuples in the format (Attribute, from_value, to_value). Given a column_values
+    mapping that maps internal column indices to (Attribute, value) pairs, this test verifies that the utility
+    tables are remapped to use the corresponding column indices.
+
+    For example, given:
+      intrinsic_table = {
+          ('Salary', 'Low'): -300.0,
+          ('Salary', 'Medium'): -500.0,
+          ('Salary', 'High'): -1000.0,
+          ('Attrition', 'False'): 700.0,
+          ('Attrition', 'True'): 0.0,
+      }
+      transition_table = {
+          ('Salary', 'Low', 'Medium'): -1.5,
+          ('Salary', 'Low', 'High'): -3.5,
+          ('Salary', 'Medium', 'High'): -1.3,
+      }
+      column_values = {
+          0: ('Salary', 'low'),
+          1: ('Salary', 'medium'),
+          2: ('Salary', 'high'),
+          3: ('Attrition', 'false'),
+          4: ('Attrition', 'true'),
+      }
+    The expected remapped utility tables are:
+      expected_intrinsic = {0: -300.0, 1: -500.0, 2: -1000.0, 3: 700.0, 4: 0.0}
+      expected_transition = {(0, 1): -1.5, (0, 2): -3.5, (1, 2): -1.3}
+    """
+    intrinsic_table = {
+        ('Salary', 'Low'): -300.0,
+        ('Salary', 'Medium'): -500.0,
+        ('Salary', 'High'): -1000.0,
+        ('Attrition', 'False'): 700.0,
+        ('Attrition', 'True'): 0.0,
+    }
+    transition_table = {
+        ('Salary', 'Low', 'Medium'): -1.5,
+        ('Salary', 'Low', 'High'): -3.5,
+        ('Salary', 'Medium', 'High'): -1.3,
+    }
+    column_values = {
+        0: ('Salary', 'low'),
+        1: ('Salary', 'medium'),
+        2: ('Salary', 'high'),
+        3: ('Attrition', 'false'),
+        4: ('Attrition', 'true'),
+    }
+    # Overwrite the instance's utility tables with the new tables.
+    action_rules.intrinsic_utility_table = intrinsic_table
+    action_rules.transition_utility_table = transition_table
+
+    remapped_intrinsic, remapped_transition = action_rules.remap_utility_tables(column_values)
+
+    expected_intrinsic = {
+        0: -300.0,
+        1: -500.0,
+        2: -1000.0,
+        3: 700.0,
+        4: 0.0,
+    }
+    expected_transition = {
+        (0, 1): -1.5,
+        (0, 2): -3.5,
+        (1, 2): -1.3,
+    }
+    assert remapped_intrinsic == expected_intrinsic
+    assert remapped_transition == expected_transition
