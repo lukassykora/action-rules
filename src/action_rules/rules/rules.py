@@ -419,21 +419,6 @@ class Rules:
         - The dataset-level realistic gain scales the net realistic gain by the estimated number of transactions,
           where effective_transactions is approximated as support / c_u (if c_u > 0).
         """
-        # First, compute the base utilities using the existing compute_rule_utilities logic.
-        u_undesired = 0.0
-        for idx in undesired_rule.get('itemset', []):
-            u_undesired += self.intrinsic_utility_table.get(idx, 0.0)
-        u_desired = 0.0
-        for idx in desired_rule.get('itemset', []):
-            u_desired += self.intrinsic_utility_table.get(idx, 0.0)
-        # Compute the base intrinsic difference.
-        rule_utility_difference = u_desired - u_undesired
-        # Compute the base transition gain.
-        transition_gain = 0.0
-        for u_idx, d_idx in zip(undesired_rule.get('itemset', []), desired_rule.get('itemset', [])):
-            if u_idx != d_idx:
-                transition_gain += self.transition_utility_table.get((u_idx, d_idx), 0.0)
-
         # Retrieve the confidence (c) from the desired rule; default to 0 if not present.
         undesired_rule_confidence = undesired_rule.get('confidence', 0.0)
         desired_rule_confidence = desired_rule.get('confidence', 0.0)
