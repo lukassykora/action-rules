@@ -363,19 +363,47 @@ class Rules:
 
         return u_undesired, u_desired, rule_utility_difference, transition_gain, rule_utility_gain
 
-    def compute_realistic_rule_utilities(self, undesired_rule: dict, desired_rule: dict, undesired_rule_utility: float, desired_rule_utility: float, transition_gain: float) -> tuple:
+    def compute_realistic_rule_utilities(
+        self,
+        undesired_rule: dict,
+        desired_rule: dict,
+        undesired_rule_utility: float,
+        desired_rule_utility: float,
+        transition_gain: float,
+    ) -> tuple:
         """
         Compute the confidence-based (realistic) rule-level utility measures for a candidate action rule.
 
-        This method calculates realistic (i.e., confidence-scaled) utilities based on the base measures.
+        This method calculates realistic (i.e., confidence-scaled) utilities based on the provided base measures.
         In particular, it computes:
-          - realistic_undesired_utility: A weighted value representing the effective undesired utility.
-          - realistic_desired_utility: A weighted value representing the effective desired utility.
-          - realistic_rule_difference: The difference between realistic_desired_utility and realistic_undesired_utility.
-          - realistic_rule_gain_dataset: The dataset-level realistic utility gain computed as:
-                ((c * u_desired - (1 - c) * u_undesired) * (support / effective_transactions)),
-            where 'support' is taken from the undesired rule and effective_transactions is estimated as support/c
-            (if c > 0).
+
+          - Realistic Undesired Utility: A weighted combination representing the effective undesired utility,
+
+            U_undesired,realistic = c_u * U_undesired + (1 - c_u) * U_desired,
+
+            where c_u is the confidence value from the undesired rule.
+
+          - Realistic Desired Utility: A weighted combination representing the effective desired utility,
+
+            U_desired,realistic = (1 - c_d) * U_undesired + c_d * U_desired,
+
+            where c_d is the confidence value from the desired rule.
+
+          - Realistic Rule Difference: The difference between the realistic desired and undesired utilities,
+
+            ΔU_realistic = U_desired,realistic - U_undesired,realistic.
+
+          - Dataset-Level Realistic Gain: The overall realistic rule gain is computed as
+            (ΔU_realistic + G_trans), where G_trans is the base transition gain.
+            The effective number of transactions is estimated as
+
+              N_eff = support / c_u   (if c_u > 0),
+
+            and the dataset-level realistic gain is then given by
+
+              ΔU_dataset,realistic = N_eff * (ΔU_realistic + G_trans).
+
+          - Dataset-Level Transition Gain: G_trans,dataset = N_eff * G_trans.
 
         Parameters
         ----------
@@ -389,7 +417,7 @@ class Rules:
             A dictionary representing the desired classification rule.
             Expected keys include:
                 'itemset': list or tuple of internal column indices,
-                'confidence': float (used as the fraction c; defaults to 0.0).
+                'confidence': float (used as the fraction c_d; defaults to 0.0).
         undesired_rule_utility : float
             The base intrinsic utility sum for the undesired rule (from compute_rule_utilities).
         desired_rule_utility : float
@@ -402,28 +430,28 @@ class Rules:
         tuple
             A tuple of five floats:
             (realistic_undesired_utility, realistic_desired_utility, realistic_rule_difference,
-             realistic_rule_gain_dataset, transition_gain_dataset).
+             transition_gain_dataset, realistic_rule_gain_dataset).
 
         Notes
         -----
-        - The confidence value c is taken from desired_rule['confidence'] (and undesired_rule['confidence'] if available),
-          defaulting to 0.0 if not present.
-        - The realistic intrinsic utilities are computed as weighted combinations of the base utilities.
-          Here, the formulas applied are:
-              realistic_undesired_utility = c_u * undesired_rule_utility + (1 - c_u) * desired_rule_utility
-              realistic_desired_utility = (1 - c_d) * undesired_rule_utility + c_d * desired_rule_utility
-          where c_u and c_d are the confidence values for the undesired and desired rules, respectively.
-        - The realistic rule difference is the difference between the realistic desired and undesired utilities.
-        - In this implementation, the transition gain is not separately scaled by confidence; instead, its
-          effect is incorporated into the dataset-level measures via transition_gain_dataset.
+        - The confidence value c is taken from undesired_rule['confidence'] (and desired_rule['confidence']
+          for c_d), defaulting to 0.0 if not present.
+        - The realistic intrinsic utilities are computed as weighted combinations of the base utilities:
+              U_undesired,realistic = c_u * U_undesired + (1 - c_u) * U_desired
+              U_desired,realistic   = (1 - c_d) * U_undesired + c_d * U_desired.
+        - The realistic rule difference is ΔU_realistic = U_desired,realistic - U_undesired,realistic.
         - The dataset-level realistic gain scales the net realistic gain by the estimated number of transactions,
-          where effective_transactions is approximated as support / c_u (if c_u > 0).
+          where N_eff is approximated as support / c_u (if c_u > 0).
         """
         # Retrieve the confidence (c) from the desired rule; default to 0 if not present.
         undesired_rule_confidence = undesired_rule.get('confidence', 0.0)
         desired_rule_confidence = desired_rule.get('confidence', 0.0)
-        realistic_undesired_utility = undesired_rule_confidence * undesired_rule_utility + (1 - undesired_rule_confidence) * desired_rule_utility
-        realistic_desired_utility = (1 - desired_rule_confidence) * undesired_rule_utility + desired_rule_confidence * desired_rule_utility
+        realistic_undesired_utility = (
+            undesired_rule_confidence * undesired_rule_utility + (1 - undesired_rule_confidence) * desired_rule_utility
+        )
+        realistic_desired_utility = (
+            1 - desired_rule_confidence
+        ) * undesired_rule_utility + desired_rule_confidence * desired_rule_utility
 
         # Compute the realistic intrinsic difference.
         realistic_rule_difference = realistic_desired_utility - realistic_undesired_utility
@@ -445,5 +473,10 @@ class Rules:
             realistic_rule_gain_dataset = 0.0
             transition_gain_dataset = 0.0
 
-        return (realistic_undesired_utility, realistic_desired_utility, realistic_rule_difference,
-                transition_gain_dataset, realistic_rule_gain_dataset)
+        return (
+            realistic_undesired_utility,
+            realistic_desired_utility,
+            realistic_rule_difference,
+            transition_gain_dataset,
+            realistic_rule_gain_dataset,
+        )
