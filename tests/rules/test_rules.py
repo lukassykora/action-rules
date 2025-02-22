@@ -25,12 +25,16 @@ def rules_with_utilities():
     The intrinsic utility table maps:
         0 -> 1.0   (e.g., representing 'age_<item_stable>_30')
         1 -> 2.0   (e.g., representing 'age_<item_stable>_40')
+        'status_<item_target>_default' -> 0.5  (intrinsic utility for the undesired target)
+        'status_<item_target>_paid'    -> 1.0  (intrinsic utility for the desired target)
 
     The transition utility table maps:
-        (0, 1) -> 0.5  (transition gain from item 0 to item 1)
+        (0, 1) -> 0.5  (transition gain for a flexible attribute change)
+        ('status_<item_target>_default', 'status_<item_target>_paid') -> 0.3
+            (transition gain for changing the target state)
     """
-    intrinsic_table = {0: 1.0, 1: 2.0}
-    transition_table = {(0, 1): 0.5}
+    intrinsic_table = {0: 1.0, 1: 2.0, 'status_<item_target>_default': 0.5, 'status_<item_target>_paid': 1.0}
+    transition_table = {(0, 1): 0.5, ('status_<item_target>_default', 'status_<item_target>_paid'): 0.3}
     return Rules(
         'status_<item_target>_default',
         'status_<item_target>_paid',
@@ -94,24 +98,25 @@ def test_compute_rule_utilities(rules_with_utilities):
     Using:
       - undesired_rule with itemset [0] (intrinsic utility = 1.0)
       - desired_rule with itemset [1] (intrinsic utility = 2.0)
-      - transition utility for (0, 1) = 0.5
+      - Target intrinsic utilities: 0.5 for undesired, 1.0 for desired.
+      - Transition utility for (0, 1) = 0.5 and for target transition = 0.3.
     Expected:
-      - u_undesired = 1.0
-      - u_desired = 2.0
-      - rule_utility_difference = 2.0 - 1.0 = 1.0
-      - transition_gain = 0.5 (since items differ)
-      - rule_utility_gain = 1.0 + 0.5 = 1.5
+      - u_undesired = 1.0 + 0.5 = 1.5
+      - u_desired = 2.0 + 1.0 = 3.0
+      - rule_utility_difference = 3.0 - 1.5 = 1.5
+      - transition_gain = 0.5 (flexible) + 0.3 (target) = 0.8
+      - rule_utility_gain = 1.5 + 0.8 = 2.3
     """
     undesired_rule = {'itemset': [0]}
     desired_rule = {'itemset': [1]}
     u_undesired, u_desired, diff, trans_gain, rule_gain = rules_with_utilities.compute_rule_utilities(
         undesired_rule, desired_rule
     )
-    assert u_undesired == 1.0
-    assert u_desired == 2.0
-    assert diff == 1.0
-    assert trans_gain == 0.5
-    assert rule_gain == 1.5
+    assert u_undesired == 1.5
+    assert u_desired == 3.0
+    assert diff == 1.5
+    assert trans_gain == 0.8
+    assert rule_gain == 2.3
 
 
 def test_compute_realistic_rule_utilities(rules_with_utilities):
@@ -119,22 +124,21 @@ def test_compute_realistic_rule_utilities(rules_with_utilities):
     Test the compute_realistic_rule_utilities method of Rules.
 
     Using the same base values from test_compute_rule_utilities:
-      - undesired_rule_utility = 1.0, desired_rule_utility = 2.0, transition_gain = 0.5.
+      - undesired_rule_utility = 1.5, desired_rule_utility = 3.0, transition_gain = 0.8.
     Additionally, set:
       - undesired_rule with confidence 0.8 and support 10.
       - desired_rule with confidence 0.6.
     Expected calculations:
-      - realistic_undesired_utility = 0.8*1.0 + 0.2*2.0 = 0.8 + 0.4 = 1.2.
-      - realistic_desired_utility = 0.4*1.0 + 0.6*2.0 = 0.4 + 1.2 = 1.6.
-      - realistic_rule_difference = 1.6 - 1.2 = 0.4.
+      - realistic_undesired_utility = 0.8*1.5 + 0.2*3.0 = 1.2 + 0.6 = 1.8.
+      - realistic_desired_utility = 0.4*1.5 + 0.6*3.0 = 0.6 + 1.8 = 2.4.
+      - realistic_rule_difference = 2.4 - 1.8 = 0.6.
       - effective_transactions = support / 0.8 = 10 / 0.8 = 12.5.
-      - realistic_rule_gain_dataset = 12.5 * (realistic_rule_difference + transition_gain)
-                                      = 12.5 * (0.4 + 0.5) = 12.5 * 0.9 = 11.25.
-      - transition_gain_dataset = 12.5 * 0.5 = 6.25.
+      - realistic_rule_gain_dataset = 12.5 * (0.6 + 0.8) = 12.5 * 1.4 = 17.5.
+      - transition_gain_dataset = 12.5 * 0.8 = 10.0.
     """
     undesired_rule = {'itemset': [0], 'support': 10, 'confidence': 0.8}
     desired_rule = {'itemset': [1], 'confidence': 0.6}
-    # Base values from compute_rule_utilities
+    # Compute base utilities from compute_rule_utilities.
     base_u_undesired, base_u_desired, _, base_trans_gain, _ = rules_with_utilities.compute_rule_utilities(
         undesired_rule, desired_rule
     )
@@ -143,9 +147,8 @@ def test_compute_realistic_rule_utilities(rules_with_utilities):
             undesired_rule, desired_rule, base_u_undesired, base_u_desired, base_trans_gain
         )
     )
-    # Check expected values:
-    assert pytest.approx(realistic_undesired, rel=1e-5) == 1.2
-    assert pytest.approx(realistic_desired, rel=1e-5) == 1.6
-    assert pytest.approx(realistic_diff, rel=1e-5) == 0.4
-    assert pytest.approx(trans_gain_dataset, rel=1e-5) == 6.25
-    assert pytest.approx(realistic_gain_dataset, rel=1e-5) == 11.25
+    assert pytest.approx(realistic_undesired, rel=1e-5) == 1.8
+    assert pytest.approx(realistic_desired, rel=1e-5) == 2.4
+    assert pytest.approx(realistic_diff, rel=1e-5) == 0.6
+    assert pytest.approx(trans_gain_dataset, rel=1e-5) == 10.0
+    assert pytest.approx(realistic_gain_dataset, rel=1e-5) == 17.5
