@@ -307,7 +307,7 @@ class Rules:
           - undesired_rule_utility: The sum of intrinsic utility values for all items in the undesired rule's itemset.
           - desired_rule_utility: The sum of intrinsic utility values for all items in the desired rule's itemset.
           - rule_utility_difference: The difference (u_desired - u_undesired) based solely on intrinsic utilities.
-          - transition_gain: The additional utility gained from flexible attribute changes (for item pairs where the index differs).
+          - transition_gain: The additional utility gained from flexible attribute changes.
           - rule_utility_gain: The overall net gain computed as (rule_utility_difference + transition_gain).
 
         Parameters
