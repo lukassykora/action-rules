@@ -1,6 +1,7 @@
 """Class Rules."""
 
 from collections import defaultdict
+from typing import Optional  # noqa
 
 
 class Rules:
@@ -56,8 +57,8 @@ class Rules:
         desired_state: str,
         columns: list,
         count_transactions: int,
-        intrinsic_utility_table: dict = None,
-        transition_utility_table: dict = None,
+        intrinsic_utility_table: Optional[dict] = None,
+        transition_utility_table: Optional[dict] = None,
     ):
         """
         Initialize the Rules class with the specified undesired and desired states, columns, and transaction count.

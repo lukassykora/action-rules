@@ -87,8 +87,8 @@ class ActionRules:
         min_desired_support: int,
         min_desired_confidence: float,
         verbose=False,
-        intrinsic_utility_table: dict = None,
-        transition_utility_table: dict = None,
+        intrinsic_utility_table: Optional[dict] = None,
+        transition_utility_table: Optional[dict] = None,
     ):
         """
         Initialize the ActionRules class with the specified parameters.
