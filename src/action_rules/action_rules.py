@@ -52,6 +52,14 @@ class ActionRules:
         Indicates whether GPU-accelerated numpy (cupy) is used.
     is_gpu_pd : bool
         Indicates whether GPU-accelerated pandas (cudf) is used.
+    intrinsic_utility_table : dict, optional
+        (attribute, value) -> float
+        A lookup table for the intrinsic utility of each attribute-value pair.
+        If None, no intrinsic utility is considered.
+    transition_utility_table : dict, optional
+        (attribute, from_value, to_value) -> float
+        A lookup table for cost/gain of transitions between values.
+        If None, no transition utility is considered.
 
     Methods
     -------
@@ -79,6 +87,8 @@ class ActionRules:
         min_desired_support: int,
         min_desired_confidence: float,
         verbose=False,
+        intrinsic_utility_table: dict = None,
+        transition_utility_table: dict = None,
     ):
         """
         Initialize the ActionRules class with the specified parameters.
@@ -99,6 +109,14 @@ class ActionRules:
             The minimum confidence for the desired state.
         verbose : bool, optional
             If True, enables verbose output. Default is False.
+        intrinsic_utility_table : dict, optional
+            (attribute, value) -> float
+            A lookup table for the intrinsic utility of each attribute-value pair.
+            If None, no intrinsic utility is considered.
+        transition_utility_table : dict, optional
+            (attribute, from_value, to_value) -> float
+            A lookup table for cost/gain of transitions between values.
+            If None, no transition utility is considered.
 
         Notes
         -----
@@ -118,6 +136,8 @@ class ActionRules:
         self.is_gpu_np = False
         self.is_gpu_pd = False
         self.is_onehot = False
+        self.intrinsic_utility_table = intrinsic_utility_table or {}
+        self.transition_utility_table = transition_utility_table or {}
 
     def count_max_nodes(self, stable_items_binding: dict, flexible_items_binding: dict) -> int:
         """
@@ -503,7 +523,14 @@ class ActionRules:
             }
         ]
         k = 0
-        self.rules = Rules(undesired_state, desired_state, columns, data.shape[1])
+        self.rules = Rules(
+            undesired_state,
+            desired_state,
+            columns,
+            data.shape[1],
+            self.intrinsic_utility_table,
+            self.transition_utility_table,
+        )
         candidate_generator = CandidateGenerator(
             frames,
             self.min_stable_attributes,
