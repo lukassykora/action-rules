@@ -182,8 +182,15 @@ class Rules:
                     # Utility
                     utility = None
                     if self.intrinsic_utility_table is not None or self.transition_utility_table is not None:
-                        undesired_rule_utility, desired_rule_utility, rule_utility_gain = self.compute_rule_utilities(undesired_rule, desired_rule)
-                        realistic_undesired_rule_utility, realistic_desired_rule_utility, realistic_rule_utility_gain, realistic_rule_utility_gain_dataset = self.compute_realistic_rule_utilities(undesired_rule, desired_rule)
+                        undesired_rule_utility, desired_rule_utility, rule_utility_gain = self.compute_rule_utilities(
+                            undesired_rule, desired_rule
+                        )
+                        (
+                            realistic_undesired_rule_utility,
+                            realistic_desired_rule_utility,
+                            realistic_rule_utility_gain,
+                            realistic_rule_utility_gain_dataset,
+                        ) = self.compute_realistic_rule_utilities(undesired_rule, desired_rule)
                         utility = {
                             'undesired_rule_utility': undesired_rule_utility,
                             'desired_rule_utility': desired_rule_utility,
@@ -193,7 +200,9 @@ class Rules:
                             'realistic_rule_utility_gain': realistic_rule_utility_gain,
                             'realistic_rule_utility_gain_dataset': realistic_rule_utility_gain_dataset,
                         }
-                    self.action_rules.append({'undesired': undesired_rule, 'desired': desired_rule, 'uplift': uplift, **utility})
+                    self.action_rules.append(
+                        {'undesired': undesired_rule, 'desired': desired_rule, 'uplift': uplift, **utility}
+                    )
 
     def prune_classification_rules(self, k: int, stop_list: list):
         """
@@ -400,8 +409,7 @@ class Rules:
         # Compute the dataset-level realistic utility gain.
         support = undesired_rule.get('support', 0)
         if self.count_transactions > 0:
-            realistic_gain_dataset = ((c * u_desired - (1 - c) * u_undesired) *
-                                      (support / self.count_transactions))
+            realistic_gain_dataset = (c * u_desired - (1 - c) * u_undesired) * (support / self.count_transactions)
         else:
             realistic_gain_dataset = 0.0
 
