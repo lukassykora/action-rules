@@ -155,3 +155,7 @@
 ## [1.0.8] - 2025-00-01
 
 * Feature: Dominant action rules
+
+## [1.0.9] - 2025-02-23
+
+* Feature: High-Utility Action Rules Mining
