@@ -52,6 +52,14 @@ class ActionRules:
         Indicates whether GPU-accelerated numpy (cupy) is used.
     is_gpu_pd : bool
         Indicates whether GPU-accelerated pandas (cudf) is used.
+    intrinsic_utility_table : dict, optional
+        (attribute, value) -> float
+        A lookup table for the intrinsic utility of each attribute-value pair.
+        If None, no intrinsic utility is considered.
+    transition_utility_table : dict, optional
+        (attribute, from_value, to_value) -> float
+        A lookup table for cost/gain of transitions between values.
+        If None, no transition utility is considered.
 
     Methods
     -------
@@ -79,6 +87,8 @@ class ActionRules:
         min_desired_support: int,
         min_desired_confidence: float,
         verbose=False,
+        intrinsic_utility_table: Optional[dict] = None,
+        transition_utility_table: Optional[dict] = None,
     ):
         """
         Initialize the ActionRules class with the specified parameters.
@@ -99,6 +109,14 @@ class ActionRules:
             The minimum confidence for the desired state.
         verbose : bool, optional
             If True, enables verbose output. Default is False.
+        intrinsic_utility_table : dict, optional
+            (attribute, value) -> float
+            A lookup table for the intrinsic utility of each attribute-value pair.
+            If None, no intrinsic utility is considered.
+        transition_utility_table : dict, optional
+            (attribute, from_value, to_value) -> float
+            A lookup table for cost/gain of transitions between values.
+            If None, no transition utility is considered.
 
         Notes
         -----
@@ -118,6 +136,8 @@ class ActionRules:
         self.is_gpu_np = False
         self.is_gpu_pd = False
         self.is_onehot = False
+        self.intrinsic_utility_table = intrinsic_utility_table or {}
+        self.transition_utility_table = transition_utility_table or {}
 
     def count_max_nodes(self, stable_items_binding: dict, flexible_items_binding: dict) -> int:
         """
@@ -479,6 +499,9 @@ class ActionRules:
         stable_items_binding, flexible_items_binding, target_items_binding, column_values = self.get_bindings(
             columns, stable_attributes, flexible_attributes, target
         )
+
+        self.intrinsic_utility_table, self.transition_utility_table = self.remap_utility_tables(column_values)
+
         if self.verbose:
             print('Maximum number of nodes to check for support:')
             print('_____________________________________________')
@@ -503,7 +526,14 @@ class ActionRules:
             }
         ]
         k = 0
-        self.rules = Rules(undesired_state, desired_state, columns, data.shape[1])
+        self.rules = Rules(
+            undesired_state,
+            desired_state,
+            columns,
+            data.shape[1],
+            self.intrinsic_utility_table,
+            self.transition_utility_table,
+        )
         candidate_generator = CandidateGenerator(
             frames,
             self.min_stable_attributes,
@@ -750,3 +780,60 @@ class ActionRules:
                 predicted_row['ActionRules_Uplift'] = action_rule['uplift']
                 predicted.append(predicted_row)
         return self.pd.DataFrame(predicted)  # type: ignore
+
+    def remap_utility_tables(self, column_values):
+        """
+        Remap the keys of intrinsic and transition utility tables using the provided column mapping.
+
+        The function uses `column_values`, a dictionary mapping internal column indices to
+        (attribute, value) tuples, to invert the mapping so that utility table keys are replaced
+        with the corresponding integer index (for intrinsic utilities) or a tuple of integer indices
+        (for transition utilities).
+
+        Parameters
+        ----------
+        column_values : dict
+            Dictionary mapping integer column indices to (attribute, value) pairs.
+            Example: {0: ('Age', 'O'), 1: ('Age', 'Y'), 2: ('Sex', 'F'), ...}
+
+        Returns
+        -------
+        tuple
+            A tuple (remapped_intrinsic, remapped_transition) where:
+              - remapped_intrinsic is a dict mapping integer column index to utility value.
+              - remapped_transition is a dict mapping (from_index, to_index) to utility value.
+
+        Notes
+        -----
+        - The method performs case-insensitive matching by converting attribute names and values to lowercase.
+        - If a key in a utility table does not have a corresponding entry in column_values, it is skipped.
+        """
+        # Invert column_values to map (attribute.lower(), value.lower()) -> column index.
+        inv_map = {(attr.lower(), val.lower()): idx for idx, (attr, val) in column_values.items()}
+
+        remapped_intrinsic = {}
+        # Remap intrinsic utility table keys: ('Attribute', 'Value') -> utility
+        for key, utility in self.intrinsic_utility_table.items():
+            # Normalize key to lowercase
+            attr, val = key
+            lookup_key = (attr.lower(), val.lower())
+            # Look up the corresponding column index; if not found, skip this key.
+            if lookup_key in inv_map:
+                col_index = inv_map[lookup_key]
+                remapped_intrinsic[col_index] = utility
+            # Else: optionally, one could log or warn about a missing mapping.
+
+        remapped_transition = {}
+        # Remap transition utility table keys: ('Attribute', from_value, to_value) -> utility
+        for key, utility in self.transition_utility_table.items():
+            attr, from_val, to_val = key
+            lookup_from = (attr.lower(), from_val.lower())
+            lookup_to = (attr.lower(), to_val.lower())
+            # Only remap if both the from and to values exist in inv_map.
+            if lookup_from in inv_map and lookup_to in inv_map:
+                from_index = inv_map[lookup_from]
+                to_index = inv_map[lookup_to]
+                remapped_transition[(from_index, to_index)] = utility
+            # Else: skip or log missing mapping.
+
+        return remapped_intrinsic, remapped_transition

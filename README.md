@@ -96,6 +96,7 @@ $ action-rules --min_stable_attributes 2 --min_flexible_attributes 1 --min_undes
 
 * [Titanic Dataset (GPU accelerated)](https://github.com/lukassykora/action-rules/blob/main/notebooks/Example.ipynb)
 * [Customer Churn (easy workflow)](https://github.com/lukassykora/action-rules/blob/main/notebooks/ExampleCustomerChurn.ipynb)
+* [High-Utility Action Rules Mining Example](https://github.com/lukassykora/action-rules/blob/main/notebooks/Utility.ipynb)
 
 ## Performance
 
