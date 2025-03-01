@@ -56,6 +56,8 @@ plugins:
           load_external_modules: true
           options:
             docstring_style: numpy
+  - autorefs:
+      link_titles: auto
 extra:
   social:
     - icon: fontawesome/brands/twitter

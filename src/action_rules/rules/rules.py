@@ -211,8 +211,22 @@ class Rules:
                             'transition_gain_dataset': transition_gain_dataset,
                             'realistic_rule_gain_dataset': realistic_rule_gain_dataset,
                         }
+                    # Action rulea measures
+                    ar_support, ar_confidence = self.compute_action_rule_measures(
+                        undesired_rule.get('support', 0.0),
+                        undesired_rule.get('confidence', 0.0),
+                        desired_rule.get('support', 0.0),
+                        desired_rule.get('confidence', 0.0),
+                    )
                     self.action_rules.append(
-                        {'undesired': undesired_rule, 'desired': desired_rule, 'uplift': uplift, **utility}
+                        {
+                            'undesired': undesired_rule,
+                            'desired': desired_rule,
+                            'uplift': uplift,
+                            'support': ar_support,
+                            'confidence': ar_confidence,
+                            **utility,
+                        }
                     )
 
     def prune_classification_rules(self, k: int, stop_list: list):
@@ -496,3 +510,39 @@ class Rules:
             transition_gain_dataset,
             realistic_rule_gain_dataset,
         )
+
+    def compute_action_rule_measures(
+        self, support_undesired, confidence_undesired, support_desired, confidence_desired
+    ):
+        """
+        Compute the support and confidence for an action rule formed from an undesired rule and a desired rule.
+
+        The action rule is derived by pairing a classification rule that leads to an undesired outcome
+        with a classification rule that leads to a desired outcome. In this formulation, the support
+        of the action rule is defined as the minimum of the supports of the two component rules, and
+        the confidence of the action rule is defined as the product of their confidences.
+
+        Parameters
+        ----------
+        support_undesired : float
+            The support of the undesired rule (e.g., count or relative frequency).
+        confidence_undesired : float
+            The confidence of the undesired rule (a value between 0 and 1).
+        support_desired : float
+            The support of the desired rule.
+        confidence_desired : float
+            The confidence of the desired rule (a value between 0 and 1).
+
+        Returns
+        -------
+        tuple of (float, float)
+            A tuple containing:
+                - action_support : float
+                    The support of the action rule, computed as min(support_undesired, support_desired).
+                - action_confidence : float
+                    The confidence of the action rule, computed as confidence_undesired * confidence_desired.
+
+        """
+        action_support = min(support_undesired, support_desired)
+        action_confidence = confidence_undesired * confidence_desired
+        return action_support, action_confidence

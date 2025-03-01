@@ -31,6 +31,8 @@ def sample_action_rules():
                 'target': 1,
             },
             'uplift': 0.2,
+            'support': 5,
+            'confidence': 0.48,
         }
     ]
 
