@@ -152,3 +152,35 @@ def test_compute_realistic_rule_utilities(rules_with_utilities):
     assert pytest.approx(realistic_diff, rel=1e-5) == 0.6
     assert pytest.approx(trans_gain_dataset, rel=1e-5) == 10.0
     assert pytest.approx(realistic_gain_dataset, rel=1e-5) == 17.5
+
+
+def test_compute_action_rule_measures(rules):
+    """
+    Test the compute_action_rule_measures method of Rules.
+
+    Using:
+      - support_undesired = 10
+      - confidence_undesired = 0.8
+      - support_desired = 5
+      - confidence_desired = 0.6
+
+    Expected:
+      - action_support = min(10, 5) = 5
+      - action_confidence = 0.8 * 0.6 = 0.48
+    """
+    action_support, action_confidence = rules.compute_action_rule_measures(10, 0.8, 5, 0.6)
+    assert action_support == 5
+    assert action_confidence == 0.48
+
+
+def test_add_prefix_without_conf(rules):
+    """
+    Test the add_prefix_without_conf method of Rules.
+
+    This test checks that prefixes are correctly added to both the desired and undesired sets.
+    """
+    prefix = ('age_<item_stable>_30',)
+    rules.add_prefix_without_conf(prefix, is_desired=True)
+    rules.add_prefix_without_conf(prefix, is_desired=False)
+    assert prefix in rules.desired_prefixes_without_conf
+    assert prefix in rules.undesired_prefixes_without_conf

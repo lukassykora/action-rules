@@ -139,6 +139,16 @@ class Input:
                     'target': 1,
                 },
                 'uplift': rule['uplift'],
+                'support': (
+                    rule['support']
+                    if 'support' in rule
+                    else min(rule['support of undesired part'], rule['support of desired part'])
+                ),
+                'confidence': (
+                    rule['confidence']
+                    if 'confidence' in rule
+                    else rule['confidence of undesired part'] * rule['confidence of desired part']
+                ),
             }
             for item in rule['stable']:
                 if (item['attribute'], item['value']) not in column_values.values():

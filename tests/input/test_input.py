@@ -71,6 +71,8 @@ def test_import_action_rules(input_instance, sample_json_data):
     assert output.action_rules[0]['undesired']['confidence'] == 0.8
     assert output.action_rules[0]['desired']['confidence'] == 0.6
     assert output.action_rules[0]['uplift'] == 0.2
+    assert output.action_rules[0]['support'] == 5
+    assert output.action_rules[0]['confidence'] == pytest.approx(0.48, rel=1e-6)
     assert len(output.stable_cols) > 0
     assert len(output.flexible_cols) > 0
     assert len(output.column_values) > 0

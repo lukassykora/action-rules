@@ -121,6 +121,7 @@ class Output:
                 + ', confidence of desired part: '
                 + str(action_rule['desired']['confidence'])
             )
+            rule += ', support: ' + str(action_rule['support']) + ', confidence: ' + str(action_rule['confidence'])
             rule += ', uplift: ' + str(action_rule['uplift'])
             # If utility measures exist, include them in the output.
             if 'undesired_rule_utility' in action_rule:
@@ -181,6 +182,8 @@ class Output:
             rule['support of desired part'] = int(ar_dict['desired']['support'])
             rule['confidence of desired part'] = float(ar_dict['desired']['confidence'])
             rule['uplift'] = float(ar_dict['uplift'])
+            rule['support'] = int(ar_dict['support'])
+            rule['confidence'] = float(ar_dict['confidence'])
             # Include utility measures if available.
             if 'undesired_rule_utility' in ar_dict:
                 rule['utility'] = {
@@ -236,7 +239,11 @@ class Output:
                 + self.column_values[ar_dict['undesired']['target']][1]
                 + "' is changed to '"
                 + self.column_values[ar_dict['desired']['target']][1]
-                + " with uplift: "
+                + " with support: "
+                + str(ar_dict['support'])
+                + ", confidence: "
+                + str(ar_dict['confidence'])
+                + ", uplift: "
                 + str(ar_dict['uplift'])
                 + ", support of undesired part: "
                 + str(ar_dict['undesired']['support'])
