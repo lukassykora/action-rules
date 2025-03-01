@@ -159,3 +159,7 @@
 ## [1.0.9] - 2025-02-23
 
 * Feature: High-Utility Action Rules Mining
+
+## [1.0.10] - 2025-01-03
+
+* Feature: Measures - support and confidence
