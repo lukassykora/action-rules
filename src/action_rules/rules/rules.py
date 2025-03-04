@@ -183,11 +183,9 @@ class Rules:
                     # Utility
                     utility = None
                     if self.intrinsic_utility_table is not None or self.transition_utility_table is not None:
-                        (
-                            max_rule_gain,
-                            realistic_rule_gain,
-                            realistic_rule_gain_dataset
-                        ) = self.compute_rule_utility(undesired_rule, desired_rule)
+                        (max_rule_gain, realistic_rule_gain, realistic_rule_gain_dataset) = self.compute_rule_utility(
+                            undesired_rule, desired_rule
+                        )
                         utility = {
                             'max_rule_gain': max_rule_gain,
                             'realistic_rule_gain': realistic_rule_gain,
@@ -296,7 +294,37 @@ class Rules:
             (desired_confidence - (1 - undesired_confidence)) * (undesired_support / undesired_confidence)
         ) / self.count_transactions
 
-    def compute_rule_utility(self, undesired_rule: dict, desired_rule: dict):
+    def compute_rule_utility(self, undesired_rule: dict, desired_rule: dict) -> tuple:
+        """
+        Compute various utility gains for a rule transition from undesired to desired.
+
+        The function computes intrinsic utilities for items in both the undesired and desired rule itemsets,
+        calculates a transition gain for changes in flexible attributes, and adjusts these gains using target
+        state utilities and rule confidences to derive realistic gain metrics at both the rule and dataset levels.
+
+        Parameters
+        ----------
+        undesired_rule : dict
+            Dictionary representing the undesired rule. Expected keys:
+                - 'itemset': list of item indices in the undesired rule.
+                - 'confidence': (optional) confidence level of the undesired rule.
+                - 'support': (optional) support count of the undesired rule.
+        desired_rule : dict
+            Dictionary representing the desired rule. Expected keys:
+                - 'itemset': list of item indices in the desired rule.
+                - 'confidence': (optional) confidence level of the desired rule.
+
+        Returns
+        -------
+        tuple of (float, float, float)
+            - max_rule_gain : float
+                The maximum rule gain computed as the sum of rule gain and target gain.
+            - realistic_rule_gain : float
+                The rule gain adjusted with a realistic target gain, incorporating rule confidences.
+            - realistic_rule_gain_dataset : float
+                The dataset-level realistic rule gain, computed by scaling realistic rule gain with the estimated
+                number of transactions.
+        """
         u_undesired = 0.0
         # Sum intrinsic utilities for each item index in the undesired rule's itemset.
         for idx in undesired_rule.get('itemset', []):
@@ -346,7 +374,6 @@ class Rules:
         realistic_rule_gain_dataset = transactions * realistic_rule_gain
 
         return max_rule_gain, realistic_rule_gain, realistic_rule_gain_dataset
-
 
     def compute_action_rule_measures(
         self, support_undesired, confidence_undesired, support_desired, confidence_desired
