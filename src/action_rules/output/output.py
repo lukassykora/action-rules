@@ -124,21 +124,10 @@ class Output:
             rule += ', support: ' + str(action_rule['support']) + ', confidence: ' + str(action_rule['confidence'])
             rule += ', uplift: ' + str(action_rule['uplift'])
             # If utility measures exist, include them in the output.
-            if 'undesired_rule_utility' in action_rule:
-                rule += ", utility: {"
-                rule += "undesired_rule_utility: " + str(action_rule['undesired_rule_utility'])
-                rule += ", desired_rule_utility: " + str(action_rule['desired_rule_utility'])
-                rule += ", rule_utility_difference: " + str(action_rule['rule_utility_difference'])
-                rule += ", transition_gain: " + str(action_rule['transition_gain'])
-                rule += ", rule_utility_gain: " + str(action_rule['rule_utility_gain'])
-                # If realistic utilities are present, add them as well.
-                if 'realistic_undesired_utility' in action_rule:
-                    rule += ", realistic_undesired_utility: " + str(action_rule['realistic_undesired_utility'])
-                    rule += ", realistic_desired_utility: " + str(action_rule['realistic_desired_utility'])
-                    rule += ", realistic_rule_difference: " + str(action_rule['realistic_rule_difference'])
-                    rule += ", transition_gain_dataset: " + str(action_rule['transition_gain_dataset'])
-                    rule += ", realistic_rule_gain_dataset: " + str(action_rule['realistic_rule_gain_dataset'])
-                rule += "}"
+            if 'realistic_rule_gain' in action_rule:
+                rule += ", max_rule_gain: " + str(action_rule['max_rule_gain'])
+                rule += ", realistic_rule_gain: " + str(action_rule['realistic_rule_gain'])
+                rule += ", realistic_dataset_gain: " + str(action_rule['realistic_dataset_gain'])
             ar_notation.append(rule)
         return ar_notation
 
@@ -185,20 +174,10 @@ class Output:
             rule['support'] = int(ar_dict['support'])
             rule['confidence'] = float(ar_dict['confidence'])
             # Include utility measures if available.
-            if 'undesired_rule_utility' in ar_dict:
-                rule['utility'] = {
-                    'undesired_rule_utility': ar_dict['undesired_rule_utility'],
-                    'desired_rule_utility': ar_dict['desired_rule_utility'],
-                    'rule_utility_difference': ar_dict['rule_utility_difference'],
-                    'transition_gain': ar_dict['transition_gain'],
-                    'rule_utility_gain': ar_dict['rule_utility_gain'],
-                }
-                if 'realistic_undesired_utility' in ar_dict:
-                    rule['utility']['realistic_undesired_utility'] = ar_dict['realistic_undesired_utility']
-                    rule['utility']['realistic_desired_utility'] = ar_dict['realistic_desired_utility']
-                    rule['utility']['realistic_rule_difference'] = ar_dict['realistic_rule_difference']
-                    rule['utility']['transition_gain_dataset'] = ar_dict['transition_gain_dataset']
-                    rule['utility']['realistic_rule_gain_dataset'] = ar_dict['realistic_rule_gain_dataset']
+            if 'realistic_rule_gain' in ar_dict:
+                rule['max_rule_gain'] = float(ar_dict['max_rule_gain'])
+                rule['realistic_rule_gain'] = int(ar_dict['realistic_rule_gain'])
+                rule['realistic_dataset_gain'] = float(ar_dict['realistic_dataset_gain'])
             rules.append(rule)
         return json.dumps(rules)
 
@@ -253,42 +232,12 @@ class Output:
                 + str(ar_dict['desired']['support'])
                 + ", confidence of desired part: "
                 + str(ar_dict['desired']['confidence'])
-                + "."
             )
-            # Append base utility measures if available.
-            if 'undesired_rule_utility' in ar_dict:
-                text += (
-                    ", base utilities: (undesired: "
-                    + str(ar_dict['undesired_rule_utility'])
-                    + ", desired: "
-                    + str(ar_dict['desired_rule_utility'])
-                    + ", difference: "
-                    + str(ar_dict['rule_utility_difference'])
-                    + ")"
-                )
-                text += (
-                    ", transition gain: "
-                    + str(ar_dict['transition_gain'])
-                    + ", rule utility gain: "
-                    + str(ar_dict['rule_utility_gain'])
-                )
-            # Append realistic utility measures if available.
-            if 'realistic_undesired_utility' in ar_dict:
-                text += (
-                    ", realistic utilities: (undesired: "
-                    + str(ar_dict['realistic_undesired_utility'])
-                    + ", desired: "
-                    + str(ar_dict['realistic_desired_utility'])
-                    + ", difference: "
-                    + str(ar_dict['realistic_rule_difference'])
-                    + ")"
-                )
-                text += (
-                    ", dataset-level transition gain: "
-                    + str(ar_dict['transition_gain_dataset'])
-                    + ", dataset-level rule gain: "
-                    + str(ar_dict['realistic_rule_gain_dataset'])
-                )
+            if 'realistic_rule_gain' in ar_dict:
+                text += ", max_rule_gain: " + str(ar_dict['max_rule_gain'])
+                text += ", realistic_rule_gain: " + str(ar_dict['realistic_rule_gain'])
+                text += ", realistic_dataset_gain: " + str(ar_dict['realistic_dataset_gain'])
+            text += "."
             rules.append(text)
         return rules
 

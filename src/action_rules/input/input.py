@@ -58,16 +58,9 @@ class Input:
                 "support of desired part": int,
                 "confidence of desired part": float,
                 "uplift": float,
-                "undesired_rule_utility": float,         (optional)
-                "desired_rule_utility": float,             (optional)
-                "rule_utility_difference": float,          (optional)
-                "transition_gain": float,                  (optional)
-                "rule_utility_gain": float,                (optional)
-                "realistic_undesired_utility": float,      (optional)
-                "realistic_desired_utility": float,        (optional)
-                "realistic_rule_difference": float,        (optional)
-                "transition_gain_dataset": float,          (optional)
-                "realistic_rule_gain_dataset": float,      (optional)
+                "max_rule_gain": float,                   (optional)
+                "realistic_rule_gain": float,             (optional)
+                "realistic_dataset_gain": float,          (optional)
                 "stable": [
                     {"attribute": "attribute_name", "value": "attribute_value"},
                     ...
@@ -196,16 +189,9 @@ class Input:
 
             # If the JSON rule includes utility parameters, add them to the rule dictionary.
             for utility_key in [
-                'undesired_rule_utility',
-                'desired_rule_utility',
-                'rule_utility_difference',
-                'transition_gain',
-                'rule_utility_gain',
-                'realistic_undesired_utility',
-                'realistic_desired_utility',
-                'realistic_rule_difference',
-                'transition_gain_dataset',
-                'realistic_rule_gain_dataset',
+                'max_rule_gain',
+                'realistic_rule_gain',
+                'realistic_dataset_gain',
             ]:
                 if utility_key in rule:
                     ar_dict[utility_key] = rule[utility_key]

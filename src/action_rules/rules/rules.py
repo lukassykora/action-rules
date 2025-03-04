@@ -184,34 +184,16 @@ class Rules:
                     utility = None
                     if self.intrinsic_utility_table is not None or self.transition_utility_table is not None:
                         (
-                            undesired_rule_utility,
-                            desired_rule_utility,
-                            rule_utility_difference,
-                            transition_gain,
-                            rule_utility_gain,
-                        ) = self.compute_rule_utilities(undesired_rule, desired_rule)
-                        (
-                            realistic_undesired_utility,
-                            realistic_desired_utility,
-                            realistic_rule_difference,
-                            transition_gain_dataset,
-                            realistic_rule_gain_dataset,
-                        ) = self.compute_realistic_rule_utilities(
-                            undesired_rule, desired_rule, undesired_rule_utility, desired_rule_utility, transition_gain
-                        )
+                            max_rule_gain,
+                            realistic_rule_gain,
+                            realistic_rule_gain_dataset
+                        ) = self.compute_rule_utility(undesired_rule, desired_rule)
                         utility = {
-                            'undesired_rule_utility': undesired_rule_utility,
-                            'desired_rule_utility': desired_rule_utility,
-                            'rule_utility_difference': rule_utility_difference,
-                            'transition_gain': transition_gain,
-                            'rule_utility_gain': rule_utility_gain,
-                            'realistic_undesired_utility': realistic_undesired_utility,
-                            'realistic_desired_utility': realistic_desired_utility,
-                            'realistic_rule_difference': realistic_rule_difference,
-                            'transition_gain_dataset': transition_gain_dataset,
-                            'realistic_rule_gain_dataset': realistic_rule_gain_dataset,
+                            'max_rule_gain': max_rule_gain,
+                            'realistic_rule_gain': realistic_rule_gain,
+                            'realistic_dataset_gain': realistic_rule_gain_dataset,
                         }
-                    # Action rulea measures
+                    # Action rule measures
                     ar_support, ar_confidence = self.compute_action_rule_measures(
                         undesired_rule.get('support', 0.0),
                         undesired_rule.get('confidence', 0.0),
@@ -314,52 +296,12 @@ class Rules:
             (desired_confidence - (1 - undesired_confidence)) * (undesired_support / undesired_confidence)
         ) / self.count_transactions
 
-    def compute_rule_utilities(self, undesired_rule: dict, desired_rule: dict) -> tuple:
-        """
-        Compute the base (intrinsic) rule-level utility measures for a candidate action rule.
-
-        This method calculates:
-          - undesired_rule_utility: The sum of intrinsic utility values for all items in the undesired rule's itemset,
-            plus the intrinsic utility of the target (undesired) state.
-          - desired_rule_utility: The sum of intrinsic utility values for all items in the desired rule's itemset,
-            plus the intrinsic utility of the target (desired) state.
-          - rule_utility_difference: The difference (u_desired - u_undesired) based solely on intrinsic utilities.
-          - transition_gain: The additional utility gained from flexible attribute changes,
-            plus the transition utility for changing the target state from undesired to desired.
-          - rule_utility_gain: The overall net gain computed as (rule_utility_difference + transition_gain).
-
-        Parameters
-        ----------
-        undesired_rule : dict
-            A dictionary representing the undesired classification rule.
-            Expected to have an 'itemset' key containing a list or tuple of internal column indices.
-        desired_rule : dict
-            A dictionary representing the desired classification rule.
-            Expected to have an 'itemset' key containing a list or tuple of internal column indices.
-
-        Returns
-        -------
-        tuple
-            A tuple of five floats:
-            (undesired_rule_utility, desired_rule_utility, rule_utility_difference,
-             transition_gain, rule_utility_gain).
-
-        Notes
-        -----
-        - It is assumed that self.intrinsic_utility_table maps internal column indices and target identifiers
-          (self.undesired_state, self.desired_state) to intrinsic utility values.
-        - self.transition_utility_table is assumed to map (from_index, to_index) pairs and target transitions
-          (i.e. (self.undesired_state, self.desired_state)) to transition utility values.
-        - Only items present in the utility tables contribute to the computed utilities.
-        """
-        # Initialize the undesired rule utility.
+    def compute_rule_utility(self, undesired_rule: dict, desired_rule: dict):
         u_undesired = 0.0
         # Sum intrinsic utilities for each item index in the undesired rule's itemset.
         for idx in undesired_rule.get('itemset', []):
             intrinsic_value = self.intrinsic_utility_table.get(idx, 0.0)
             u_undesired += intrinsic_value
-        # Target utility
-        u_undesired += self.intrinsic_utility_table.get(self.undesired_state, 0.0)
 
         # Initialize the desired rule utility.
         u_desired = 0.0
@@ -367,11 +309,6 @@ class Rules:
         for idx in desired_rule.get('itemset', []):
             intrinsic_value = self.intrinsic_utility_table.get(idx, 0.0)
             u_desired += intrinsic_value
-        # Target utility
-        u_desired += self.intrinsic_utility_table.get(self.desired_state, 0.0)
-
-        # Compute the intrinsic difference between desired and undesired utilities.
-        rule_utility_difference = u_desired - u_undesired
 
         # Initialize additional transition gain.
         transition_gain = 0.0
@@ -381,113 +318,24 @@ class Rules:
             if u_idx != d_idx:
                 trans_value = self.transition_utility_table.get((u_idx, d_idx), 0.0)
                 transition_gain += trans_value
+
+        rule_gain = u_desired - u_undesired + transition_gain
+
         # Target utility
-        transition_gain += self.transition_utility_table.get((self.undesired_state, self.desired_state), 0.0)
+        u_undesired_target = self.intrinsic_utility_table.get(self.undesired_state, 0.0)
+        u_desired_target = self.intrinsic_utility_table.get(self.desired_state, 0.0)
+        transition_gain_target = self.transition_utility_table.get((self.undesired_state, self.desired_state), 0.0)
 
-        # The overall rule utility gain includes the intrinsic difference plus the transition gain.
-        rule_utility_gain = rule_utility_difference + transition_gain
+        target_gain = u_desired_target - u_undesired_target + transition_gain_target
 
-        return u_undesired, u_desired, rule_utility_difference, transition_gain, rule_utility_gain
-
-    def compute_realistic_rule_utilities(
-        self,
-        undesired_rule: dict,
-        desired_rule: dict,
-        undesired_rule_utility: float,
-        desired_rule_utility: float,
-        transition_gain: float,
-    ) -> tuple:
-        """
-        Compute the confidence-based (realistic) rule-level utility measures for a candidate action rule.
-
-        This method calculates realistic (i.e., confidence-scaled) utilities based on the provided base measures,
-        which already include the target utilities. In particular, it computes:
-
-          - Realistic Undesired Utility: A weighted value representing the effective undesired utility,
-
-            U_{undesired, realistic} = c_u * U_{undesired} + (1 - c_u) * U_{desired},
-
-            where c_u is the confidence value from the undesired rule.
-
-          - Realistic Desired Utility: A weighted value representing the effective desired utility,
-
-            U_{desired, realistic} = (1 - c_d) * U_{undesired} + c_d * U_{desired},
-
-            where c_d is the confidence value from the desired rule.
-
-          - Realistic Rule Difference: The difference between the realistic desired and undesired utilities,
-
-            ΔU_{realistic} = U_{desired, realistic} - U_{undesired, realistic}.
-
-          - Dataset-Level Realistic Gain: The overall realistic rule gain is computed as
-            (ΔU_{realistic} + G_trans), where G_trans is the base transition gain.
-            The effective number of transactions is estimated as
-
-              N_eff = support / c_u   (if c_u > 0),
-
-            and the dataset-level realistic gain is then given by
-
-              ΔU_{dataset, realistic} = N_eff * (ΔU_{realistic} + G_trans).
-
-          - Dataset-Level Transition Gain: G_{trans, dataset} = N_eff * G_trans.
-
-        Parameters
-        ----------
-        undesired_rule : dict
-            A dictionary representing the undesired classification rule.
-            Expected keys include:
-                'itemset': list or tuple of internal column indices,
-                'support': int, and
-                'confidence': float (optional; defaults to 0.0).
-        desired_rule : dict
-            A dictionary representing the desired classification rule.
-            Expected keys include:
-                'itemset': list or tuple of internal column indices,
-                'confidence': float (used as the fraction c_d; defaults to 0.0).
-        undesired_rule_utility : float
-            The base intrinsic utility sum for the undesired rule (from compute_rule_utilities),
-            including the target utility.
-        desired_rule_utility : float
-            The base intrinsic utility sum for the desired rule (from compute_rule_utilities),
-            including the target utility.
-        transition_gain : float
-            The base transition gain (from compute_rule_utilities),
-            including the target transition gain.
-
-        Returns
-        -------
-        tuple
-            A tuple of five floats:
-            (realistic_undesired_utility, realistic_desired_utility, realistic_rule_difference,
-             transition_gain_dataset, realistic_rule_gain_dataset).
-
-        Notes
-        -----
-        - The confidence values c_u and c_d are taken from undesired_rule['confidence'] and desired_rule['confidence'],
-          respectively; if not present, they default to 0.0.
-        - The realistic intrinsic utilities are computed as weighted combinations of the base utilities:
-              U_{undesired, realistic} = c_u * U_{undesired} + (1 - c_u) * U_{desired}
-              U_{desired, realistic}   = (1 - c_d) * U_{undesired} + c_d * U_{desired}.
-        - The realistic rule difference is computed as:
-              ΔU_{realistic} = U_{desired, realistic} - U_{undesired, realistic}.
-        - The dataset-level realistic gain scales the overall realistic gain by the number of transactions,
-          where N_eff is approximated as support / c_u (if c_u > 0).
-        """
-        # Retrieve the confidence (c) from the desired rule; default to 0 if not present.
+        # Realistic target gain
         undesired_rule_confidence = undesired_rule.get('confidence', 0.0)
         desired_rule_confidence = desired_rule.get('confidence', 0.0)
-        realistic_undesired_utility = (
-            undesired_rule_confidence * undesired_rule_utility + (1 - undesired_rule_confidence) * desired_rule_utility
-        )
-        realistic_desired_utility = (
-            1 - desired_rule_confidence
-        ) * undesired_rule_utility + desired_rule_confidence * desired_rule_utility
+        target_gain_realistic = (desired_rule_confidence - (1 - undesired_rule_confidence)) * target_gain
 
-        # Compute the realistic intrinsic difference.
-        realistic_rule_difference = realistic_desired_utility - realistic_undesired_utility
-
-        # Overall realistic rule utility gain.
-        realistic_rule_gain = realistic_rule_difference + transition_gain
+        # Rule gain
+        max_rule_gain = rule_gain + target_gain
+        realistic_rule_gain = rule_gain + target_gain_realistic
 
         # Compute dataset-level realistic gain.
         support = undesired_rule.get('support', 0)
@@ -495,21 +343,10 @@ class Rules:
             transactions = support / undesired_rule_confidence
         else:
             transactions = 0.0
+        realistic_rule_gain_dataset = transactions * realistic_rule_gain
 
-        if transactions > 0:
-            realistic_rule_gain_dataset = transactions * realistic_rule_gain
-            transition_gain_dataset = transactions * transition_gain
-        else:
-            realistic_rule_gain_dataset = 0.0
-            transition_gain_dataset = 0.0
+        return max_rule_gain, realistic_rule_gain, realistic_rule_gain_dataset
 
-        return (
-            realistic_undesired_utility,
-            realistic_desired_utility,
-            realistic_rule_difference,
-            transition_gain_dataset,
-            realistic_rule_gain_dataset,
-        )
 
     def compute_action_rule_measures(
         self, support_undesired, confidence_undesired, support_desired, confidence_desired
