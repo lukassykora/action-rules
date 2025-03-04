@@ -152,7 +152,7 @@
 
 * Fix: Onehot data copy
 
-## [1.0.8] - 2025-00-01
+## [1.0.8] - 2025-01-01
 
 * Feature: Dominant action rules
 
@@ -160,6 +160,10 @@
 
 * Feature: High-Utility Action Rules Mining
 
-## [1.0.10] - 2025-01-03
+## [1.0.10] - 2025-03-01
 
 * Feature: Measures - support and confidence
+
+## [1.0.11] - 2025-03-04
+
+* Fix: Utility
