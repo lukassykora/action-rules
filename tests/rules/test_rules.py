@@ -17,34 +17,6 @@ def rules():
     )
 
 
-@pytest.fixture
-def rules_with_utilities():
-    """
-    Fixture for a Rules instance with preset utility tables.
-
-    The intrinsic utility table maps:
-        0 -> 1.0   (e.g., representing 'age_<item_stable>_30')
-        1 -> 2.0   (e.g., representing 'age_<item_stable>_40')
-        'status_<item_target>_default' -> 0.5  (intrinsic utility for the undesired target)
-        'status_<item_target>_paid'    -> 1.0  (intrinsic utility for the desired target)
-
-    The transition utility table maps:
-        (0, 1) -> 0.5  (transition gain for a flexible attribute change)
-        ('status_<item_target>_default', 'status_<item_target>_paid') -> 0.3
-            (transition gain for changing the target state)
-    """
-    intrinsic_table = {0: 1.0, 1: 2.0, 'status_<item_target>_default': 0.5, 'status_<item_target>_paid': 1.0}
-    transition_table = {(0, 1): 0.5, ('status_<item_target>_default', 'status_<item_target>_paid'): 0.3}
-    return Rules(
-        'status_<item_target>_default',
-        'status_<item_target>_paid',
-        ['age_<item_stable>_30', 'age_<item_stable>_40'],
-        20,
-        intrinsic_utility_table=intrinsic_table,
-        transition_utility_table=transition_table,
-    )
-
-
 def test_add_classification_rules(rules):
     """Test the add_classification_rules method of Rules."""
     new_ar_prefix = tuple()
@@ -91,69 +63,6 @@ def test_calculate_uplift(rules):
     assert uplift == 0.25
 
 
-def test_compute_rule_utilities(rules_with_utilities):
-    """
-    Test the compute_rule_utilities method of Rules.
-
-    Using:
-      - undesired_rule with itemset [0] (intrinsic utility = 1.0)
-      - desired_rule with itemset [1] (intrinsic utility = 2.0)
-      - Target intrinsic utilities: 0.5 for undesired, 1.0 for desired.
-      - Transition utility for (0, 1) = 0.5 and for target transition = 0.3.
-    Expected:
-      - u_undesired = 1.0 + 0.5 = 1.5
-      - u_desired = 2.0 + 1.0 = 3.0
-      - rule_utility_difference = 3.0 - 1.5 = 1.5
-      - transition_gain = 0.5 (flexible) + 0.3 (target) = 0.8
-      - rule_utility_gain = 1.5 + 0.8 = 2.3
-    """
-    undesired_rule = {'itemset': [0]}
-    desired_rule = {'itemset': [1]}
-    u_undesired, u_desired, diff, trans_gain, rule_gain = rules_with_utilities.compute_rule_utilities(
-        undesired_rule, desired_rule
-    )
-    assert u_undesired == 1.5
-    assert u_desired == 3.0
-    assert diff == 1.5
-    assert trans_gain == 0.8
-    assert rule_gain == 2.3
-
-
-def test_compute_realistic_rule_utilities(rules_with_utilities):
-    """
-    Test the compute_realistic_rule_utilities method of Rules.
-
-    Using the same base values from test_compute_rule_utilities:
-      - undesired_rule_utility = 1.5, desired_rule_utility = 3.0, transition_gain = 0.8.
-    Additionally, set:
-      - undesired_rule with confidence 0.8 and support 10.
-      - desired_rule with confidence 0.6.
-    Expected calculations:
-      - realistic_undesired_utility = 0.8*1.5 + 0.2*3.0 = 1.2 + 0.6 = 1.8.
-      - realistic_desired_utility = 0.4*1.5 + 0.6*3.0 = 0.6 + 1.8 = 2.4.
-      - realistic_rule_difference = 2.4 - 1.8 = 0.6.
-      - effective_transactions = support / 0.8 = 10 / 0.8 = 12.5.
-      - realistic_rule_gain_dataset = 12.5 * (0.6 + 0.8) = 12.5 * 1.4 = 17.5.
-      - transition_gain_dataset = 12.5 * 0.8 = 10.0.
-    """
-    undesired_rule = {'itemset': [0], 'support': 10, 'confidence': 0.8}
-    desired_rule = {'itemset': [1], 'confidence': 0.6}
-    # Compute base utilities from compute_rule_utilities.
-    base_u_undesired, base_u_desired, _, base_trans_gain, _ = rules_with_utilities.compute_rule_utilities(
-        undesired_rule, desired_rule
-    )
-    (realistic_undesired, realistic_desired, realistic_diff, trans_gain_dataset, realistic_gain_dataset) = (
-        rules_with_utilities.compute_realistic_rule_utilities(
-            undesired_rule, desired_rule, base_u_undesired, base_u_desired, base_trans_gain
-        )
-    )
-    assert pytest.approx(realistic_undesired, rel=1e-5) == 1.8
-    assert pytest.approx(realistic_desired, rel=1e-5) == 2.4
-    assert pytest.approx(realistic_diff, rel=1e-5) == 0.6
-    assert pytest.approx(trans_gain_dataset, rel=1e-5) == 10.0
-    assert pytest.approx(realistic_gain_dataset, rel=1e-5) == 17.5
-
-
 def test_compute_action_rule_measures(rules):
     """
     Test the compute_action_rule_measures method of Rules.
@@ -184,3 +93,77 @@ def test_add_prefix_without_conf(rules):
     rules.add_prefix_without_conf(prefix, is_desired=False)
     assert prefix in rules.desired_prefixes_without_conf
     assert prefix in rules.undesired_prefixes_without_conf
+
+
+def test_compute_rule_utility(rules):
+    """
+    Test the compute_rule_utility method of Rules.
+
+    This test sets up custom intrinsic and transition utility tables and defines
+    sample undesired and desired rules to verify that compute_rule_utility returns
+    the expected tuple of (max_rule_gain, realistic_rule_gain, realistic_rule_gain_dataset).
+
+    Test scenario:
+      - intrinsic_utility_table:
+          * 0: 1.0
+          * 1: 2.0
+          * 2: 3.0
+          * rules.undesired_state: 2.0
+          * rules.desired_state: 5.0
+      - transition_utility_table:
+          * (0, 1): 1.5
+          * (rules.undesired_state, rules.desired_state): 3.0
+      - undesired_rule:
+          * itemset: [0, 2]
+          * confidence: 0.8
+          * support: 10
+      - desired_rule:
+          * itemset: [1, 2]
+          * confidence: 0.6
+
+    Expected computation:
+      1. u_undesired = 1.0 (for 0) + 3.0 (for 2) = 4.0
+      2. u_desired   = 2.0 (for 1) + 3.0 (for 2) = 5.0
+      3. Transition gain from (0,1): 1.5 (since 0 != 1), and no gain for (2,2)
+         => rule_gain = (5.0 - 4.0 + 1.5) = 2.5
+      4. Target utilities:
+         - u_undesired_target = 2.0, u_desired_target = 5.0,
+         - transition_gain_target = 3.0,
+         => target_gain = (5.0 - 2.0 + 3.0) = 6.0
+      5. Realistic target gain:
+         = (0.6 - (1 - 0.8)) * 6.0 = (0.6 - 0.2) * 6.0 = 2.4
+      6. max_rule_gain = 2.5 + 6.0 = 8.5
+         realistic_rule_gain = 2.5 + 2.4 = 4.9
+      7. Transactions estimated as: support / confidence = 10 / 0.8 = 12.5
+         => realistic_rule_gain_dataset = 12.5 * 4.9 = 61.25
+
+    Returns
+    -------
+    tuple of (float, float, float)
+        The computed gains: (max_rule_gain, realistic_rule_gain, realistic_rule_gain_dataset)
+    """
+    # Setup custom utility tables for testing.
+    rules.intrinsic_utility_table = {
+        0: 1.0,
+        1: 2.0,
+        2: 3.0,
+        rules.undesired_state: 2.0,
+        rules.desired_state: 5.0,
+    }
+    rules.transition_utility_table = {
+        (0, 1): 1.5,
+        (rules.undesired_state, rules.desired_state): 3.0,
+    }
+
+    # Define test rules.
+    undesired_rule = {'itemset': [0, 2], 'confidence': 0.8, 'support': 10}
+    desired_rule = {'itemset': [1, 2], 'confidence': 0.6}
+
+    # Compute the utility gains.
+    result = rules.compute_rule_utility(undesired_rule, desired_rule)
+    expected = (8.5, 4.9, 61.25)
+    tol = 1e-6  # tolerance for floating point comparisons
+
+    assert abs(result[0] - expected[0]) < tol, f"max_rule_gain: expected {expected[0]}, got {result[0]}"
+    assert abs(result[1] - expected[1]) < tol, f"realistic_rule_gain: expected {expected[1]}, got {result[1]}"
+    assert abs(result[2] - expected[2]) < tol, f"realistic_rule_gain_dataset: expected {expected[2]}, got {result[2]}"
