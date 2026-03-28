@@ -101,6 +101,42 @@ from action_rules import ActionRules
     help='Use GPU (cuDF) for data processing if available.',
     default=False,
 )
+@click.option(
+    '--ci_method',
+    type=click.Choice(['bootstrap', 'analytic', 'wald', 'bayesian']),
+    default=None,
+    help='Confidence interval method. If not set, no CI is computed.',
+)
+@click.option(
+    '--confidence_level',
+    type=float,
+    default=0.95,
+    help='Confidence level for CI (default: 0.95).',
+)
+@click.option(
+    '--ci_threshold',
+    type=float,
+    default=None,
+    help='Threshold for rule categorization (Accept/Reject/Uncertain).',
+)
+@click.option(
+    '--n_bootstrap',
+    type=int,
+    default=1000,
+    help='Number of bootstrap resamples (default: 1000).',
+)
+@click.option(
+    '--n_mc',
+    type=int,
+    default=10000,
+    help='Number of Monte Carlo draws for Bayesian method (default: 10000).',
+)
+@click.option(
+    '--random_state',
+    type=int,
+    default=None,
+    help='Random seed for reproducibility.',
+)
 def main(
     min_stable_attributes: int,
     min_flexible_attributes: int,
@@ -116,6 +152,12 @@ def main(
     desired_state: str,
     output_json_path: BinaryIO,
     use_gpu: bool,
+    ci_method: str,
+    confidence_level: float,
+    ci_threshold: float,
+    n_bootstrap: int,
+    n_mc: int,
+    random_state: int,
 ):
     """
     CLI.
@@ -153,6 +195,18 @@ def main(
         Path to the output JSON file where the results will be saved.
     use_gpu : bool
         Use GPU (cuDF) for data processing if available.
+    ci_method : str, optional
+        Confidence interval method ('bootstrap', 'analytic', or 'bayesian'). No CI computed if None.
+    confidence_level : float
+        Confidence level for CI (default: 0.95).
+    ci_threshold : float, optional
+        Threshold for rule categorization (Accept/Reject/Uncertain).
+    n_bootstrap : int
+        Number of bootstrap resamples (default: 1000).
+    n_mc : int
+        Number of Monte Carlo draws for Bayesian method (default: 10000).
+    random_state : int, optional
+        Random seed for reproducibility.
 
     Returns
     -------
@@ -179,6 +233,16 @@ def main(
         str(desired_state),
         use_gpu,
     )
+    if ci_method is not None:
+        action_rules.confidence_intervals(
+            data,
+            method=ci_method,
+            confidence_level=confidence_level,
+            threshold=ci_threshold,
+            n_bootstrap=n_bootstrap,
+            n_mc=n_mc,
+            random_state=random_state,
+        )
     rules = action_rules.get_rules()
     if rules is not None:
         output_json_path.write(str.encode(str(rules.get_export_notation())))

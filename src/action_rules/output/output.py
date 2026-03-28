@@ -1,6 +1,28 @@
 """Class Output."""
 
 import json
+import math
+
+
+def _safe_float(v):
+    """Convert a value to float for JSON serialization, replacing NaN/Inf with None.
+
+    Parameters
+    ----------
+    v : float or None
+        The value to convert.
+
+    Returns
+    -------
+    float or None
+        The float value, or None when *v* is NaN, Inf, or already None.
+    """
+    if v is None:
+        return None
+    f = float(v)
+    if math.isnan(f) or math.isinf(f):
+        return None
+    return f
 
 
 class Output:
@@ -65,6 +87,17 @@ class Output:
         self.stable_cols = [item for sublist in stable_items_binding.values() for item in sublist]
         self.flexible_cols = [item for sublist in flexible_items_binding.values() for item in sublist]
         self.column_values = column_values
+        self.ci_results = None
+
+    def set_confidence_intervals(self, results):
+        """Store confidence interval results.
+
+        Parameters
+        ----------
+        results : list
+            List of ConfidenceIntervalResult objects.
+        """
+        self.ci_results = results
 
     def get_ar_notation(self):
         """
@@ -82,7 +115,7 @@ class Output:
         the support and confidence values for both the undesired and desired parts, as well as the uplift.
         """
         ar_notation = []
-        for action_rule in self.action_rules:
+        for rule_idx, action_rule in enumerate(self.action_rules):
             rule = '['
             for i, item in enumerate(action_rule['undesired']['itemset']):
                 if i > 0:
@@ -128,6 +161,12 @@ class Output:
                 rule += ", max_rule_gain: " + str(action_rule['max_rule_gain'])
                 rule += ", realistic_rule_gain: " + str(action_rule['realistic_rule_gain'])
                 rule += ", realistic_dataset_gain: " + str(action_rule['realistic_dataset_gain'])
+            # Append CI information when available.
+            if self.ci_results is not None and rule_idx < len(self.ci_results):
+                ci = self.ci_results[rule_idx]
+                rule += ', uplift CI [{:.4f}, {:.4f}]'.format(ci.uplift_ci_lower, ci.uplift_ci_upper)
+                if ci.category is not None:
+                    rule += ', category: ' + ci.category.value
             ar_notation.append(rule)
         return ar_notation
 
@@ -147,7 +186,7 @@ class Output:
         support, confidence, and uplift values. The list is then converted to a JSON string for export.
         """
         rules = []
-        for ar_dict in self.action_rules:
+        for rule_idx, ar_dict in enumerate(self.action_rules):
             rule = {'stable': [], 'flexible': []}
             for i, item in enumerate(ar_dict['undesired']['itemset']):
                 if item == ar_dict['desired']['itemset'][i]:
@@ -178,6 +217,22 @@ class Output:
                 rule['max_rule_gain'] = float(ar_dict['max_rule_gain'])
                 rule['realistic_rule_gain'] = int(ar_dict['realistic_rule_gain'])
                 rule['realistic_dataset_gain'] = float(ar_dict['realistic_dataset_gain'])
+            # Append CI information when available.
+            if self.ci_results is not None and rule_idx < len(self.ci_results):
+                ci = self.ci_results[rule_idx]
+                rule['ci'] = {
+                    'method': ci.method,
+                    'confidence_level': ci.confidence_level,
+                    'uplift_ci_lower': _safe_float(ci.uplift_ci_lower),
+                    'uplift_ci_upper': _safe_float(ci.uplift_ci_upper),
+                    'uplift_se': _safe_float(ci.uplift_se),
+                }
+                if ci.realistic_rule_gain_point is not None:
+                    rule['ci']['realistic_rule_gain_ci_lower'] = _safe_float(ci.realistic_rule_gain_ci_lower)
+                    rule['ci']['realistic_rule_gain_ci_upper'] = _safe_float(ci.realistic_rule_gain_ci_upper)
+                    rule['ci']['realistic_rule_gain_se'] = _safe_float(ci.realistic_rule_gain_se)
+                if ci.category is not None:
+                    rule['ci']['category'] = ci.category.value
             rules.append(rule)
         return json.dumps(rules)
 
@@ -197,7 +252,7 @@ class Output:
         the target attribute change, support, confidence, and uplift values.
         """
         rules = []
-        for ar_dict in self.action_rules:
+        for rule_idx, ar_dict in enumerate(self.action_rules):
             text = "If "
             for i, item in enumerate(ar_dict['undesired']['itemset']):
                 if item == ar_dict['desired']['itemset'][i]:
@@ -237,6 +292,12 @@ class Output:
                 text += ", max_rule_gain: " + str(ar_dict['max_rule_gain'])
                 text += ", realistic_rule_gain: " + str(ar_dict['realistic_rule_gain'])
                 text += ", realistic_dataset_gain: " + str(ar_dict['realistic_dataset_gain'])
+            # Append CI information when available.
+            if self.ci_results is not None and rule_idx < len(self.ci_results):
+                ci = self.ci_results[rule_idx]
+                text += ', uplift CI [{:.4f}, {:.4f}]'.format(ci.uplift_ci_lower, ci.uplift_ci_upper)
+                if ci.category is not None:
+                    text += ', category: ' + ci.category.value
             text += "."
             rules.append(text)
         return rules

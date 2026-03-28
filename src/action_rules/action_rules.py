@@ -138,6 +138,9 @@ class ActionRules:
         self.is_onehot = False
         self.intrinsic_utility_table = intrinsic_utility_table or {}
         self.transition_utility_table = transition_utility_table or {}
+        self._original_intrinsic_utility_table = {}  # type: dict
+        self._original_transition_utility_table = {}  # type: dict
+        self._column_values = None  # type: Optional[dict]
 
     def count_max_nodes(self, stable_items_binding: dict, flexible_items_binding: dict) -> int:
         """
@@ -500,6 +503,11 @@ class ActionRules:
             columns, stable_attributes, flexible_attributes, target
         )
 
+        # Preserve original string-keyed tables before remapping to integer indices.
+        # confidence_intervals() needs the originals to pass to inference engines.
+        self._original_intrinsic_utility_table = dict(self.intrinsic_utility_table)
+        self._original_transition_utility_table = dict(self.transition_utility_table)
+        self._column_values = column_values
         self.intrinsic_utility_table, self.transition_utility_table = self.remap_utility_tables(column_values)
 
         if self.verbose:
@@ -780,6 +788,134 @@ class ActionRules:
                 predicted_row['ActionRules_Uplift'] = action_rule['uplift']
                 predicted.append(predicted_row)
         return self.pd.DataFrame(predicted)  # type: ignore
+
+    def confidence_intervals(
+        self,
+        data,
+        method: str = "bootstrap",
+        confidence_level: float = 0.95,
+        threshold: Optional[float] = None,
+        metric: str = "uplift",
+        n_bootstrap: int = 1000,
+        n_mc: int = 10000,
+        random_state: Optional[int] = None,
+    ):
+        """Compute confidence intervals for all fitted action rules.
+
+        Applies a statistical inference engine to the provided dataset and
+        attaches confidence interval results to the output object.  Results
+        are also returned directly for immediate inspection.
+
+        Parameters
+        ----------
+        data : Union[cudf.DataFrame, pandas.DataFrame]
+            The original (pre-encoding) dataset used for inference.  Columns
+            must match the attribute names supplied during ``fit()``.
+        method : str, optional
+            CI method to use.  One of:
+
+            - ``'bootstrap'`` — non-parametric percentile bootstrap
+              (default).
+            - ``'analytic'`` or ``'wald'`` — closed-form Wald interval via
+              the delta method (requires ``scipy``).
+            - ``'bayesian'`` — Beta-Binomial conjugate model with Monte
+              Carlo posterior sampling.
+        confidence_level : float, optional
+            Nominal coverage probability, e.g. ``0.95`` (default).
+        threshold : float, optional
+            Decision boundary used to categorise rules after computing
+            intervals.  When ``None`` (default), categorisation is skipped.
+        metric : str, optional
+            Metric to use for categorisation when *threshold* is provided.
+            One of ``'uplift'`` (default) or ``'realistic_rule_gain'``.
+        n_bootstrap : int, optional
+            Number of bootstrap resamples.  Only used when
+            ``method='bootstrap'``.  Default ``1000``.
+        n_mc : int, optional
+            Number of Monte Carlo samples.  Only used when
+            ``method='bayesian'``.  Default ``10000``.
+        random_state : int, optional
+            Seed for reproducibility.  Passed to the engine when applicable.
+            ``None`` uses the global NumPy random state.
+
+        Returns
+        -------
+        list
+            List of :class:`~action_rules.inference.base.ConfidenceIntervalResult`
+            objects, one per action rule, in the same order as
+            ``self.output.action_rules``.
+
+        Raises
+        ------
+        RuntimeError
+            If the model has not been fitted yet (``self.output is None``).
+        ValueError
+            If *method* is not one of the supported values.
+
+        Notes
+        -----
+        Results are also stored on the output object via
+        ``self.output.set_confidence_intervals(results)`` so that subsequent
+        calls to ``get_ar_notation()``, ``get_pretty_ar_notation()``, and
+        ``get_export_notation()`` include the CI information.
+        """
+        if self.output is None:
+            raise RuntimeError("The model is not fit.")
+
+        if not (0 < confidence_level < 1):
+            raise ValueError("confidence_level must be strictly between 0 and 1.")
+        if n_bootstrap < 1:
+            raise ValueError("n_bootstrap must be >= 1.")
+        if n_mc < 1:
+            raise ValueError("n_mc must be >= 1.")
+        valid_metrics = {"uplift", "realistic_rule_gain"}
+        if metric not in valid_metrics:
+            raise ValueError(f"Unknown metric '{metric}'. Choose from {valid_metrics}.")
+
+        from .inference.base import categorize_rule, extract_rule_masks
+
+        masks = extract_rule_masks(self.output)
+
+        if method == "bootstrap":
+            from .inference.bootstrap import BootstrapEngine
+
+            engine = BootstrapEngine(n_bootstrap, random_state)
+        elif method in ("analytic", "wald"):
+            from .inference.analytic import AnalyticEngine
+
+            engine = AnalyticEngine()
+        elif method == "bayesian":
+            from .inference.bayesian import BayesianEngine
+
+            engine = BayesianEngine(n_mc, random_state=random_state)
+        else:
+            raise ValueError(
+                f"Unknown method '{method}'. Supported methods: 'bootstrap', 'analytic', 'wald', 'bayesian'."
+            )
+
+        results = engine.compute(
+            data=data,
+            rules=masks,
+            confidence_level=confidence_level,
+            intrinsic_utility_table=self._original_intrinsic_utility_table or None,
+            transition_utility_table=self._original_transition_utility_table or None,
+            column_values=self._column_values,
+        )
+
+        if threshold is not None:
+            for result in results:
+                if metric == "uplift":
+                    result.category = categorize_rule(result.uplift_ci_lower, result.uplift_ci_upper, threshold)
+                else:
+                    if result.realistic_rule_gain_ci_lower is not None:
+                        result.category = categorize_rule(
+                            result.realistic_rule_gain_ci_lower,
+                            result.realistic_rule_gain_ci_upper,
+                            threshold,
+                        )
+
+        self.output.set_confidence_intervals(results)
+        return results
 
     def remap_utility_tables(self, column_values):
         """

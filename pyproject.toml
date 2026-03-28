@@ -24,6 +24,8 @@ python = ">=3.9,<4.0"
 click = "8.0.1"
 pandas = "^2.2.2"
 
+scipy = { version = ">=1.10.0", optional = true }
+matplotlib = { version = ">=3.7.0", optional = true }
 black  = { version = "^24.4.2", optional = true}
 isort  = { version = "^5.13.2", optional = true}
 flake8  = { version = "^7.0.0", optional = true}
@@ -58,6 +60,9 @@ test = [
     ]
 
 dev = ["tox", "pre-commit", "virtualenv", "pip", "twine", "toml", "bump2version"]
+
+inference = ["scipy"]
+viz = ["matplotlib", "scipy"]
 
 doc = [
     "mkdocs",
