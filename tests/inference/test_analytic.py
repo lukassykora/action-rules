@@ -3,19 +3,12 @@
 import math
 from math import sqrt
 
-import numpy as np
 import pandas as pd
 import pytest
 from scipy.stats import norm
 
 from action_rules.inference.analytic import AnalyticEngine
-from action_rules.inference.base import (
-    ConfidenceIntervalResult,
-    RuleCategory,
-    RuleMasks,
-    compute_group_counts,
-)
-
+from action_rules.inference.base import ConfidenceIntervalResult, RuleCategory, RuleMasks, compute_group_counts
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -368,7 +361,8 @@ class TestWithUtilityTables:
         intrinsic, transition = _make_utility_tables()
         cv = _make_column_values()
         result = AnalyticEngine().compute(
-            data, [_make_rule()],
+            data,
+            [_make_rule()],
             intrinsic_utility_table=intrinsic,
             transition_utility_table=transition,
             column_values=cv,
@@ -387,7 +381,8 @@ class TestWithUtilityTables:
         intrinsic, transition = _make_utility_tables()
         cv = _make_column_values()
         result = AnalyticEngine().compute(
-            mixed, [_make_rule()],
+            mixed,
+            [_make_rule()],
             intrinsic_utility_table=intrinsic,
             transition_utility_table=transition,
             column_values=cv,
@@ -402,7 +397,8 @@ class TestWithUtilityTables:
         intrinsic, transition = _make_utility_tables()
         cv = _make_column_values()
         result = AnalyticEngine().compute(
-            mixed, [_make_rule()],
+            mixed,
+            [_make_rule()],
             intrinsic_utility_table=intrinsic,
             transition_utility_table=transition,
             column_values=cv,
@@ -419,7 +415,8 @@ class TestWithUtilityTables:
         intrinsic, transition = _make_utility_tables()
         cv = _make_column_values()
         result = AnalyticEngine().compute(
-            mixed, [_make_rule()],
+            mixed,
+            [_make_rule()],
             intrinsic_utility_table=intrinsic,
             transition_utility_table=transition,
             column_values=cv,
@@ -439,7 +436,8 @@ class TestWithUtilityTables:
         mixed = pd.concat([data, extra], ignore_index=True)
         cv = _make_column_values()
         result = AnalyticEngine().compute(
-            mixed, [_make_rule()],
+            mixed,
+            [_make_rule()],
             intrinsic_utility_table=intrinsic,
             transition_utility_table=transition,
             column_values=cv,
@@ -460,7 +458,8 @@ class TestWithUtilityTables:
         intrinsic, transition = _make_utility_tables()
         cv = _make_column_values()
         result = AnalyticEngine().compute(
-            data, [_make_rule()],
+            data,
+            [_make_rule()],
             intrinsic_utility_table=intrinsic,
             transition_utility_table=transition,
             column_values=cv,
@@ -476,13 +475,15 @@ class TestWithUtilityTables:
         cv = _make_column_values()
         engine = AnalyticEngine()
         r1 = engine.compute(
-            mixed, [_make_rule()],
+            mixed,
+            [_make_rule()],
             intrinsic_utility_table=intrinsic,
             transition_utility_table=transition,
             column_values=cv,
         )[0]
         r2 = engine.compute(
-            mixed, [_make_rule()],
+            mixed,
+            [_make_rule()],
             intrinsic_utility_table=intrinsic,
             transition_utility_table=transition,
             column_values=cv,
@@ -561,3 +562,143 @@ class TestMultipleRules:
         results = AnalyticEngine().compute(data, [_make_rule(), _make_rule()])
         for r in results:
             assert not math.isnan(r.uplift_point)
+
+
+# ---------------------------------------------------------------------------
+# Wilson Score Interval tests
+# ---------------------------------------------------------------------------
+
+
+class TestWilsonScoreInterval:
+    """Tests for the Wilson score interval (analytic_type='wilson')."""
+
+    def test_invalid_analytic_type_raises(self):
+        """Unknown analytic_type raises ValueError."""
+        with pytest.raises(ValueError, match="Unknown analytic_type"):
+            AnalyticEngine(analytic_type="invalid")
+
+    def test_default_is_wald(self):
+        """AnalyticEngine() with no args uses Wald (backward compatibility)."""
+        engine = AnalyticEngine()
+        assert engine.analytic_type == "wald"
+
+    def test_wilson_returns_valid_results(self):
+        """Wilson produces non-NaN results for well-supported rules."""
+        data = _make_data()
+        result = AnalyticEngine(analytic_type="wilson").compute(data, [_make_rule()])[0]
+        assert not math.isnan(result.uplift_point)
+        assert not math.isnan(result.uplift_se)
+        assert result.uplift_ci_lower <= result.uplift_ci_upper
+
+    def test_wilson_method_field_is_analytic(self):
+        """Wilson still reports method='analytic'."""
+        data = _make_data()
+        result = AnalyticEngine(analytic_type="wilson").compute(data, [_make_rule()])[0]
+        assert result.method == "analytic"
+
+    def test_wilson_differs_from_wald_small_n(self):
+        """Wilson and Wald produce different results when n is small."""
+        # Small dataset with imperfect confidence — Wilson adjusts centre.
+        g1 = pd.DataFrame({'age': ['0'] * 8, 'class': ['0'] * 8, 'target': ['0'] * 8})
+        g2 = pd.DataFrame({'age': ['0'] * 5, 'class': ['1'] * 5, 'target': ['1'] * 5})
+        g3 = pd.DataFrame({'age': ['1'] * 7, 'class': ['0'] * 7, 'target': ['0'] * 7})
+        data = pd.concat([g1, g2, g3], ignore_index=True)
+
+        wald = AnalyticEngine(analytic_type="wald").compute(data, [_make_rule()])[0]
+        wilson = AnalyticEngine(analytic_type="wilson").compute(data, [_make_rule()])[0]
+
+        # Point estimates should differ (Wilson shrinks toward 0.5).
+        assert wald.uplift_point != pytest.approx(wilson.uplift_point, abs=1e-6)
+
+    def test_wilson_converges_to_wald_large_n(self):
+        """For large n with moderate p, Wilson and Wald should be very close."""
+        data = _make_data(n=4000)
+        # Add some imperfect rows to avoid p=1.
+        extra = pd.DataFrame({'age': ['0'] * 100, 'class': ['0'] * 100, 'target': ['1'] * 100})
+        big_data = pd.concat([data, extra], ignore_index=True)
+
+        wald = AnalyticEngine(analytic_type="wald").compute(big_data, [_make_rule()])[0]
+        wilson = AnalyticEngine(analytic_type="wilson").compute(big_data, [_make_rule()])[0]
+
+        assert wald.uplift_point == pytest.approx(wilson.uplift_point, rel=0.02)
+        assert wald.uplift_se == pytest.approx(wilson.uplift_se, rel=0.05)
+
+    def test_wilson_ci_symmetric(self):
+        """Wilson CI is also symmetric (delta-method propagation)."""
+        g1 = pd.DataFrame({'age': ['0'] * 30, 'class': ['0'] * 30, 'target': ['0'] * 30})
+        g2 = pd.DataFrame({'age': ['0'] * 10, 'class': ['0'] * 10, 'target': ['1'] * 10})
+        g3 = pd.DataFrame({'age': ['0'] * 20, 'class': ['1'] * 20, 'target': ['1'] * 20})
+        g4 = pd.DataFrame({'age': ['1'] * 40, 'class': ['0'] * 40, 'target': ['0'] * 40})
+        data = pd.concat([g1, g2, g3, g4], ignore_index=True)
+        result = AnalyticEngine(analytic_type="wilson").compute(data, [_make_rule()])[0]
+        left = result.uplift_point - result.uplift_ci_lower
+        right = result.uplift_ci_upper - result.uplift_point
+        assert left == pytest.approx(right, rel=1e-9)
+
+    def test_wilson_ci_known_formula(self):
+        """Verify _wilson_ci against hand-computed values for x=15, n=20, z=1.96."""
+        p_tilde, se_w = AnalyticEngine._wilson_ci(15, 20, 1.96)
+        # p_hat = 0.75, denom = 20 + 1.96^2 = 23.8416
+        # p_tilde = (15 + 1.9208) / 23.8416 ≈ 0.7094
+        assert p_tilde == pytest.approx((15 + 1.96**2 / 2) / (20 + 1.96**2), rel=1e-9)
+        assert se_w > 0
+
+    def test_wilson_gain_uses_adjusted_proportions(self):
+        """When Wilson is active, gain should use Wilson-adjusted proportions."""
+        # Small dataset where p_tilde differs visibly from p_hat.
+        g1 = pd.DataFrame({'age': ['0'] * 10, 'class': ['0'] * 10, 'target': ['0'] * 10})
+        g2 = pd.DataFrame({'age': ['0'] * 8, 'class': ['1'] * 8, 'target': ['1'] * 8})
+        g3 = pd.DataFrame({'age': ['1'] * 12, 'class': ['0'] * 12, 'target': ['0'] * 12})
+        data = pd.concat([g1, g2, g3], ignore_index=True)
+
+        intrinsic, transition = _make_utility_tables()
+        cvs = _make_column_values()
+
+        wald = AnalyticEngine(analytic_type="wald").compute(
+            data, [_make_rule()], intrinsic_utility_table=intrinsic,
+            transition_utility_table=transition, column_values=cvs,
+        )[0]
+        wilson = AnalyticEngine(analytic_type="wilson").compute(
+            data, [_make_rule()], intrinsic_utility_table=intrinsic,
+            transition_utility_table=transition, column_values=cvs,
+        )[0]
+
+        # Gain point estimates should differ when Wilson is used.
+        assert wald.realistic_rule_gain_point != pytest.approx(wilson.realistic_rule_gain_point, abs=1e-6)
+
+
+class TestAutoMode:
+    """Tests for analytic_type='auto'."""
+
+    def test_auto_uses_wilson_for_small_n(self):
+        """With n < 40, auto should produce different results than Wald."""
+        g1 = pd.DataFrame({'age': ['0'] * 15, 'class': ['0'] * 15, 'target': ['0'] * 15})
+        g2 = pd.DataFrame({'age': ['0'] * 10, 'class': ['1'] * 10, 'target': ['1'] * 10})
+        g3 = pd.DataFrame({'age': ['1'] * 10, 'class': ['0'] * 10, 'target': ['0'] * 10})
+        data = pd.concat([g1, g2, g3], ignore_index=True)
+
+        wald = AnalyticEngine(analytic_type="wald").compute(data, [_make_rule()])[0]
+        auto = AnalyticEngine(analytic_type="auto").compute(data, [_make_rule()])[0]
+        wilson = AnalyticEngine(analytic_type="wilson").compute(data, [_make_rule()])[0]
+
+        # Auto should match Wilson (n < 40).
+        assert auto.uplift_point == pytest.approx(wilson.uplift_point, rel=1e-9)
+        assert auto.uplift_point != pytest.approx(wald.uplift_point, abs=1e-6)
+
+    def test_auto_uses_wald_for_large_n_moderate_p(self):
+        """With n >= 40 and moderate p (all in 0.05-0.95), auto should match Wald exactly."""
+        # Build data where both p_u and p_d are moderate (~0.75).
+        # mask_undesired (age=0, class=0): 60 match / 80 total -> p_u = 0.75
+        # mask_desired   (age=0, class=1): 45 match / 60 total -> p_d = 0.75
+        g1 = pd.DataFrame({'age': ['0'] * 60, 'class': ['0'] * 60, 'target': ['0'] * 60})
+        g2 = pd.DataFrame({'age': ['0'] * 20, 'class': ['0'] * 20, 'target': ['1'] * 20})
+        g3 = pd.DataFrame({'age': ['0'] * 45, 'class': ['1'] * 45, 'target': ['1'] * 45})
+        g4 = pd.DataFrame({'age': ['0'] * 15, 'class': ['1'] * 15, 'target': ['0'] * 15})
+        g5 = pd.DataFrame({'age': ['1'] * 60, 'class': ['0'] * 60, 'target': ['0'] * 60})
+        big_data = pd.concat([g1, g2, g3, g4, g5], ignore_index=True)
+
+        wald = AnalyticEngine(analytic_type="wald").compute(big_data, [_make_rule()])[0]
+        auto = AnalyticEngine(analytic_type="auto").compute(big_data, [_make_rule()])[0]
+
+        assert auto.uplift_point == pytest.approx(wald.uplift_point, rel=1e-12)
+        assert auto.uplift_se == pytest.approx(wald.uplift_se, rel=1e-12)

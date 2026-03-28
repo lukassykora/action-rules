@@ -799,6 +799,8 @@ class ActionRules:
         n_bootstrap: int = 1000,
         n_mc: int = 10000,
         random_state: Optional[int] = None,
+        analytic_type: str = "wald",
+        bootstrap_type: str = "percentile",
     ):
         """Compute confidence intervals for all fitted action rules.
 
@@ -837,6 +839,23 @@ class ActionRules:
         random_state : int, optional
             Seed for reproducibility.  Passed to the engine when applicable.
             ``None`` uses the global NumPy random state.
+        analytic_type : str, optional
+            Sub-type of the analytic method.  Only used when
+            ``method='analytic'`` or ``method='wald'``.  One of:
+
+            - ``'wald'`` — standard Wald normal approximation (default).
+            - ``'wilson'`` — Wilson score interval for each proportion.
+            - ``'auto'`` — Wilson when sample is small (``n < 40``) or
+              proportion is extreme (``< 0.05`` or ``> 0.95``), Wald
+              otherwise (following Agresti & Coull, 1998).
+        bootstrap_type : str, optional
+            Sub-type of the bootstrap method.  Only used when
+            ``method='bootstrap'``.  One of:
+
+            - ``'percentile'`` — standard percentile bootstrap (default).
+            - ``'bca'`` — bias-corrected and accelerated (BCa) interval,
+              which adjusts for bias and skewness using jackknife
+              acceleration (Efron, 1987).
 
         Returns
         -------
@@ -868,6 +887,12 @@ class ActionRules:
             raise ValueError("n_bootstrap must be >= 1.")
         if n_mc < 1:
             raise ValueError("n_mc must be >= 1.")
+        valid_analytic_types = {"wald", "wilson", "auto"}
+        if analytic_type not in valid_analytic_types:
+            raise ValueError(f"Unknown analytic_type '{analytic_type}'. Choose from {valid_analytic_types}.")
+        valid_bootstrap_types = {"percentile", "bca"}
+        if bootstrap_type not in valid_bootstrap_types:
+            raise ValueError(f"Unknown bootstrap_type '{bootstrap_type}'. Choose from {valid_bootstrap_types}.")
         valid_metrics = {"uplift", "realistic_rule_gain"}
         if metric not in valid_metrics:
             raise ValueError(f"Unknown metric '{metric}'. Choose from {valid_metrics}.")
@@ -879,11 +904,11 @@ class ActionRules:
         if method == "bootstrap":
             from .inference.bootstrap import BootstrapEngine
 
-            engine = BootstrapEngine(n_bootstrap, random_state)
+            engine = BootstrapEngine(n_bootstrap, random_state, bootstrap_type=bootstrap_type)
         elif method in ("analytic", "wald"):
             from .inference.analytic import AnalyticEngine
 
-            engine = AnalyticEngine()
+            engine = AnalyticEngine(analytic_type=analytic_type)
         elif method == "bayesian":
             from .inference.bayesian import BayesianEngine
 

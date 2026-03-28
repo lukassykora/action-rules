@@ -137,6 +137,18 @@ from action_rules import ActionRules
     default=None,
     help='Random seed for reproducibility.',
 )
+@click.option(
+    '--analytic_type',
+    type=click.Choice(['wald', 'wilson', 'auto']),
+    default='wald',
+    help='Sub-type for analytic method: wald (default), wilson, or auto.',
+)
+@click.option(
+    '--bootstrap_type',
+    type=click.Choice(['percentile', 'bca']),
+    default='percentile',
+    help='Sub-type for bootstrap method: percentile (default) or bca.',
+)
 def main(
     min_stable_attributes: int,
     min_flexible_attributes: int,
@@ -158,6 +170,8 @@ def main(
     n_bootstrap: int,
     n_mc: int,
     random_state: int,
+    analytic_type: str,
+    bootstrap_type: str,
 ):
     """
     CLI.
@@ -242,6 +256,8 @@ def main(
             n_bootstrap=n_bootstrap,
             n_mc=n_mc,
             random_state=random_state,
+            analytic_type=analytic_type,
+            bootstrap_type=bootstrap_type,
         )
     rules = action_rules.get_rules()
     if rules is not None:

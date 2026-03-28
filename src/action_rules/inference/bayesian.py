@@ -13,12 +13,7 @@ from typing import List, Optional
 import numpy as np
 import pandas as pd
 
-from .base import (
-    ConfidenceIntervalResult,
-    InferenceEngine,
-    categorize_rule,
-    compute_group_counts,
-)
+from .base import ConfidenceIntervalResult, InferenceEngine, categorize_rule, compute_group_counts
 
 
 class BayesianEngine(InferenceEngine):

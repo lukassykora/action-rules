@@ -1,7 +1,15 @@
 """Analytic (closed-form) confidence interval engine for action rules.
 
-Uses the Wald normal approximation with the delta method to propagate
-uncertainty from the two Bernoulli confidences into the uplift measure.
+Supports three interval types for binomial proportions:
+
+- **Wald** — standard normal approximation (default).
+- **Wilson** — Wilson score interval, more accurate for small samples
+  or extreme proportions.
+- **Auto** — selects Wilson or Wald per-rule based on sample size and
+  proportion magnitude (Agresti & Coull, 1998).
+
+All types use the delta method to propagate uncertainty from the two
+independent Bernoulli confidences into the uplift measure.
 """
 
 from math import sqrt
@@ -19,7 +27,7 @@ from .base import (
 
 
 class AnalyticEngine(InferenceEngine):
-    """Wald normal-approximation CI engine using the delta method.
+    """Analytic CI engine supporting Wald and Wilson score intervals.
 
     For each action rule the engine computes closed-form confidence intervals
     for the uplift measure (and optionally for the realistic rule gain) by
@@ -28,7 +36,7 @@ class AnalyticEngine(InferenceEngine):
 
     Notes
     -----
-    The variance of the uplift is derived as follows (delta method):
+    **Wald** variance of the uplift is derived as follows (delta method):
 
     Let ``p_u = conf_u`` and ``p_d = conf_d`` be two independent Bernoulli
     proportions.  The uplift is:
@@ -47,14 +55,16 @@ class AnalyticEngine(InferenceEngine):
         \\text{Var}(\\text{uplift}) &= \\left(\\frac{n_u}{N}\\right)^2
             \\left(\\text{Var}(p_u) + \\text{Var}(p_d)\\right)
 
-    The interval is then:
+    **Wilson** score interval replaces the raw proportions with continuity-
+    corrected Wilson centers and their corresponding SEs before applying the
+    same delta-method formula.  Wilson is more accurate for small samples or
+    extreme proportions (Brown et al., 2001).
+
+    The final interval is in both cases:
 
     .. math::
 
         \\text{uplift} \\pm z_{1-\\alpha/2} \\cdot \\text{SE}(\\text{uplift})
-
-    This engine is stateless and can be reused across multiple datasets
-    with the same instance.
 
     For gain uncertainty only the target-gain component is stochastic
     (``rule_gain`` is deterministic given the utility tables), so:
@@ -64,6 +74,86 @@ class AnalyticEngine(InferenceEngine):
         \\text{SE}(\\text{gain}) = |\\text{target\\_gain}| \\cdot
             \\sqrt{\\text{Var}(p_u) + \\text{Var}(p_d)}
     """
+
+    # ------------------------------------------------------------------
+    # Initialisation
+    # ------------------------------------------------------------------
+
+    def __init__(self, analytic_type: str = "wald") -> None:
+        """Initialise the engine with the chosen interval type.
+
+        Parameters
+        ----------
+        analytic_type : str, optional
+            Which closed-form interval to use.  One of:
+
+            ``'wald'``
+                Standard Wald (normal approximation) interval.  Default and
+                backward-compatible choice.
+            ``'wilson'``
+                Wilson score interval.  More accurate for small samples or
+                when proportions are near 0 or 1.
+            ``'auto'``
+                Selects Wilson when ``n < 40`` or ``p < 0.05`` / ``p > 0.95``
+                for either side; falls back to Wald otherwise.
+
+        Raises
+        ------
+        ValueError
+            If *analytic_type* is not one of the recognised values.
+        """
+        valid = {"wald", "wilson", "auto"}
+        if analytic_type not in valid:
+            raise ValueError(f"Unknown analytic_type '{analytic_type}'. Choose from {valid}.")
+        self.analytic_type = analytic_type
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _wilson_ci(x: float, n: float, z: float):
+        """Wilson score interval for a binomial proportion.
+
+        Computes the Wilson-adjusted centre and the corresponding
+        half-width expressed as a standard-error equivalent so that the
+        result can be used in the same delta-method formula as the Wald SE.
+
+        Parameters
+        ----------
+        x : float
+            Number of successes.
+        n : float
+            Number of trials.
+        z : float
+            Critical value (e.g. 1.96 for 95 % two-sided).
+
+        Returns
+        -------
+        p_tilde : float
+            Wilson score centre (shifted proportion).
+        se_wilson : float
+            Half-width divided by *z*, analogous to a standard error.
+
+        Notes
+        -----
+        Wilson score interval (Wilson, 1927):
+
+        .. math::
+
+            \\tilde{p} = \\frac{x + z^2/2}{n + z^2}
+
+        .. math::
+
+            w = \\frac{z \\sqrt{n}}{n + z^2}
+                \\sqrt{\\hat{p}(1-\\hat{p}) + \\frac{z^2}{4n}}
+        """
+        p_hat = x / n
+        denom = n + z**2
+        p_tilde = (x + z**2 / 2.0) / denom
+        w = z * sqrt(n) / denom * sqrt(p_hat * (1.0 - p_hat) + z**2 / (4.0 * n))
+        se_wilson = w / z if z > 0 else 0.0
+        return p_tilde, se_wilson
 
     # ------------------------------------------------------------------
     # Public API
@@ -78,7 +168,10 @@ class AnalyticEngine(InferenceEngine):
         transition_utility_table: Optional[dict] = None,
         column_values: Optional[dict] = None,
     ) -> List[ConfidenceIntervalResult]:
-        """Compute analytic (Wald) confidence intervals for each action rule.
+        """Compute analytic confidence intervals for each action rule.
+
+        The interval type (Wald / Wilson / auto) is determined by
+        ``self.analytic_type`` set at construction time.
 
         Parameters
         ----------
@@ -121,9 +214,7 @@ class AnalyticEngine(InferenceEngine):
         try:
             from scipy.stats import norm
         except ImportError:
-            raise ImportError(
-                "scipy is required for analytic CI computation. Install it with: pip install scipy"
-            )
+            raise ImportError("scipy is required for analytic CI computation. Install it with: pip install scipy")
 
         compute_gain = (intrinsic_utility_table is not None) or (transition_utility_table is not None)
 
@@ -173,24 +264,41 @@ class AnalyticEngine(InferenceEngine):
             p_u = n_u_match / n_u_ante
             p_d = n_d_match / n_d_ante
 
-            # Uplift point estimate (Ras et al., 2009):
-            # d = p_d - (1 - p_u) = p_d + p_u - 1
-            # uplift = d * n_u_ante / n_total
-            d = p_d + p_u - 1.0
-            uplift_point = d * n_u_ante / n_total
-
-            # Delta-method variance for uplift.
-            # Var(p_u) = p_u(1-p_u)/n_u_ante,  Var(p_d) = p_d(1-p_d)/n_d_ante
-            # Var(d)   = Var(p_u) + Var(p_d)  (independent)
-            # Var(uplift) = (n_u_ante/n_total)^2 * Var(d)
-            var_p_u = p_u * (1.0 - p_u) / n_u_ante
-            var_p_d = p_d * (1.0 - p_d) / n_d_ante
-            var_d = var_p_u + var_p_d
             scale = n_u_ante / n_total
-            var_uplift = scale**2 * var_d
-            se_uplift = sqrt(var_uplift)
 
-            # Wald interval (symmetric around the point estimate).
+            # Decide which variant to use for this rule.
+            use_wilson = self.analytic_type == "wilson" or (
+                self.analytic_type == "auto"
+                and (n_u_ante < 40 or n_d_ante < 40 or p_u < 0.05 or p_u > 0.95 or p_d < 0.05 or p_d > 0.95)
+            )
+
+            if use_wilson:
+                # Wilson score interval (Wilson, 1927); more accurate for small
+                # samples or extreme proportions (Brown et al., 2001).
+                p_tilde_u, se_wu = self._wilson_ci(n_u_match, n_u_ante, z)
+                p_tilde_d, se_wd = self._wilson_ci(n_d_match, n_d_ante, z)
+                d = p_tilde_d + p_tilde_u - 1.0
+                uplift_point = d * scale
+                var_d = se_wu**2 + se_wd**2
+                se_uplift = scale * sqrt(var_d)
+            else:
+                # Uplift point estimate (Ras et al., 2009):
+                # d = p_d - (1 - p_u) = p_d + p_u - 1
+                # uplift = d * n_u_ante / n_total
+                d = p_d + p_u - 1.0
+                uplift_point = d * scale
+
+                # Delta-method variance for uplift.
+                # Var(p_u) = p_u(1-p_u)/n_u_ante,  Var(p_d) = p_d(1-p_d)/n_d_ante
+                # Var(d)   = Var(p_u) + Var(p_d)  (independent)
+                # Var(uplift) = (n_u_ante/n_total)^2 * Var(d)
+                var_p_u = p_u * (1.0 - p_u) / n_u_ante
+                var_p_d = p_d * (1.0 - p_d) / n_d_ante
+                var_d = var_p_u + var_p_d
+                var_uplift = scale**2 * var_d
+                se_uplift = sqrt(var_uplift)
+
+            # Symmetric interval around the point estimate (same for both types).
             uplift_lower = uplift_point - z * se_uplift
             uplift_upper = uplift_point + z * se_uplift
 
@@ -202,10 +310,14 @@ class AnalyticEngine(InferenceEngine):
 
             # Optional gain statistics.
             if compute_gain and column_values is not None:
+                # Use Wilson-adjusted proportions when Wilson is active so the
+                # gain point estimate is consistent with the uplift CI centre.
+                gain_p_u = p_tilde_u if use_wilson else p_u
+                gain_p_d = p_tilde_d if use_wilson else p_d
                 gain_point = compute_realistic_gain(
                     rule,
-                    p_u,
-                    p_d,
+                    gain_p_u,
+                    gain_p_d,
                     intrinsic_utility_table,
                     transition_utility_table,
                     column_values,
@@ -225,7 +337,8 @@ class AnalyticEngine(InferenceEngine):
                 trans_target = transition.get((target_attr, target_u_val, target_d_val), 0.0)
                 target_gain = u_target_desired - u_target_undesired + trans_target
 
-                # SE of gain = |target_gain| * sqrt(Var(d))  (delta method on gain)
+                # SE of gain = |target_gain| * sqrt(Var(d))  (delta method on gain).
+                # var_d is set by whichever branch (Wald/Wilson) ran above.
                 se_gain = abs(target_gain) * sqrt(var_d)
 
                 gain_lower = gain_point - z * se_gain

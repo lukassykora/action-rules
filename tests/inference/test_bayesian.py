@@ -6,14 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from action_rules.inference.base import (
-    ConfidenceIntervalResult,
-    RuleCategory,
-    RuleMasks,
-    compute_group_counts,
-)
+from action_rules.inference.base import ConfidenceIntervalResult, RuleCategory, RuleMasks, compute_group_counts
 from action_rules.inference.bayesian import BayesianEngine
-
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -267,7 +261,8 @@ class TestWithUtilityTables:
         intrinsic, transition = _utility_tables()
         cv = _make_column_values()
         result = BayesianEngine(n_mc=500, random_state=0).compute(
-            data, [_make_rule()],
+            data,
+            [_make_rule()],
             intrinsic_utility_table=intrinsic,
             transition_utility_table=transition,
             column_values=cv,
@@ -283,7 +278,8 @@ class TestWithUtilityTables:
         intrinsic, transition = _utility_tables()
         cv = _make_column_values()
         result = BayesianEngine(n_mc=500, random_state=0).compute(
-            data, [_make_rule()],
+            data,
+            [_make_rule()],
             intrinsic_utility_table=intrinsic,
             transition_utility_table=transition,
             column_values=cv,
@@ -297,7 +293,8 @@ class TestWithUtilityTables:
         cv = _make_column_values()
         n_mc = 400
         result = BayesianEngine(n_mc=n_mc, random_state=0).compute(
-            data, [_make_rule()],
+            data,
+            [_make_rule()],
             intrinsic_utility_table=intrinsic,
             transition_utility_table=transition,
             column_values=cv,
@@ -311,13 +308,15 @@ class TestWithUtilityTables:
         intrinsic, transition = _utility_tables()
         cv = _make_column_values()
         r1 = BayesianEngine(n_mc=300, random_state=7).compute(
-            data, [_make_rule()],
+            data,
+            [_make_rule()],
             intrinsic_utility_table=intrinsic,
             transition_utility_table=transition,
             column_values=cv,
         )[0]
         r2 = BayesianEngine(n_mc=300, random_state=7).compute(
-            data, [_make_rule()],
+            data,
+            [_make_rule()],
             intrinsic_utility_table=intrinsic,
             transition_utility_table=transition,
             column_values=cv,
@@ -331,7 +330,8 @@ class TestWithUtilityTables:
         intrinsic, transition = _utility_tables()
         cv = _make_column_values()
         result = BayesianEngine(n_mc=300, random_state=0).compute(
-            data, [_make_rule()],
+            data,
+            [_make_rule()],
             intrinsic_utility_table=intrinsic,
             transition_utility_table=transition,
             column_values=cv,

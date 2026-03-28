@@ -12,7 +12,6 @@ import pytest
 from action_rules.action_rules import ActionRules
 from action_rules.inference.base import ConfidenceIntervalResult, RuleCategory
 
-
 # ---------------------------------------------------------------------------
 # Shared synthetic dataset
 # ---------------------------------------------------------------------------
@@ -20,16 +19,70 @@ from action_rules.inference.base import ConfidenceIntervalResult, RuleCategory
 _DATA = pd.DataFrame(
     {
         'Sex': [
-            'M', 'M', 'M', 'M', 'M', 'F', 'F', 'F', 'F', 'F',
-            'M', 'M', 'M', 'M', 'M', 'F', 'F', 'F', 'F', 'F',
+            'M',
+            'M',
+            'M',
+            'M',
+            'M',
+            'F',
+            'F',
+            'F',
+            'F',
+            'F',
+            'M',
+            'M',
+            'M',
+            'M',
+            'M',
+            'F',
+            'F',
+            'F',
+            'F',
+            'F',
         ],
         'Class': [
-            '1st', '1st', '2nd', '2nd', '3rd', '1st', '1st', '2nd', '2nd', '3rd',
-            '1st', '1st', '2nd', '3rd', '3rd', '1st', '2nd', '2nd', '3rd', '3rd',
+            '1st',
+            '1st',
+            '2nd',
+            '2nd',
+            '3rd',
+            '1st',
+            '1st',
+            '2nd',
+            '2nd',
+            '3rd',
+            '1st',
+            '1st',
+            '2nd',
+            '3rd',
+            '3rd',
+            '1st',
+            '2nd',
+            '2nd',
+            '3rd',
+            '3rd',
         ],
         'Survived': [
-            '0', '0', '0', '0', '0', '1', '1', '1', '1', '0',
-            '0', '0', '0', '0', '1', '1', '1', '1', '0', '0',
+            '0',
+            '0',
+            '0',
+            '0',
+            '0',
+            '1',
+            '1',
+            '1',
+            '1',
+            '0',
+            '0',
+            '0',
+            '0',
+            '0',
+            '1',
+            '1',
+            '1',
+            '1',
+            '0',
+            '0',
         ],
     }
 )
@@ -521,9 +574,9 @@ class TestConfidenceIntervalsWithUtility:
         ar, data = fitted_ar_with_utility
         results = ar.confidence_intervals(data, method='bootstrap', n_bootstrap=50, random_state=42)
         for r in results:
-            assert r.realistic_rule_gain_point is not None, (
-                f"realistic_rule_gain_point should not be None for rule {r.rule_index}"
-            )
+            assert (
+                r.realistic_rule_gain_point is not None
+            ), f"realistic_rule_gain_point should not be None for rule {r.rule_index}"
             assert r.realistic_rule_gain_ci_lower is not None
             assert r.realistic_rule_gain_ci_upper is not None
             assert r.realistic_rule_gain_se is not None
@@ -544,9 +597,9 @@ class TestConfidenceIntervalsWithUtility:
         ar, data = fitted_ar
         results = ar.confidence_intervals(data, method='bootstrap', n_bootstrap=50, random_state=42)
         for r in results:
-            assert r.realistic_rule_gain_point is None, (
-                f"realistic_rule_gain_point should be None when no utility tables are given (rule {r.rule_index})"
-            )
+            assert (
+                r.realistic_rule_gain_point is None
+            ), f"realistic_rule_gain_point should be None when no utility tables are given (rule {r.rule_index})"
             assert r.realistic_rule_gain_ci_lower is None
             assert r.realistic_rule_gain_ci_upper is None
             assert r.realistic_rule_gain_se is None
@@ -621,11 +674,13 @@ class TestCategorization:
             target_undesired_state='0',
             target_desired_state='1',
         )
-        results = ar.confidence_intervals(_DATA.copy(), method='bootstrap', n_bootstrap=200, random_state=42, threshold=0.0)
+        results = ar.confidence_intervals(
+            _DATA.copy(), method='bootstrap', n_bootstrap=200, random_state=42, threshold=0.0
+        )
         for r in results:
-            assert r.category == RuleCategory.ACCEPT, (
-                f"Expected ACCEPT for rule {r.rule_index} with threshold=0.0, got {r.category}"
-            )
+            assert (
+                r.category == RuleCategory.ACCEPT
+            ), f"Expected ACCEPT for rule {r.rule_index} with threshold=0.0, got {r.category}"
 
     def test_reject_with_high_threshold(self):
         """
@@ -647,11 +702,13 @@ class TestCategorization:
             target_undesired_state='0',
             target_desired_state='1',
         )
-        results = ar.confidence_intervals(_DATA.copy(), method='bootstrap', n_bootstrap=50, random_state=42, threshold=10.0)
+        results = ar.confidence_intervals(
+            _DATA.copy(), method='bootstrap', n_bootstrap=50, random_state=42, threshold=10.0
+        )
         for r in results:
-            assert r.category == RuleCategory.REJECT, (
-                f"Expected REJECT for rule {r.rule_index} with threshold=10.0, got {r.category}"
-            )
+            assert (
+                r.category == RuleCategory.REJECT
+            ), f"Expected REJECT for rule {r.rule_index} with threshold=10.0, got {r.category}"
 
     def test_uncertain_exists(self):
         """
@@ -673,11 +730,13 @@ class TestCategorization:
             target_undesired_state='0',
             target_desired_state='1',
         )
-        results = ar.confidence_intervals(_DATA.copy(), method='bootstrap', n_bootstrap=200, random_state=42, threshold=0.1)
-        categories = [r.category for r in results]
-        assert RuleCategory.UNCERTAIN in categories, (
-            f"Expected at least one UNCERTAIN result with threshold=0.1, got: {[c.value for c in categories]}"
+        results = ar.confidence_intervals(
+            _DATA.copy(), method='bootstrap', n_bootstrap=200, random_state=42, threshold=0.1
         )
+        categories = [r.category for r in results]
+        assert (
+            RuleCategory.UNCERTAIN in categories
+        ), f"Expected at least one UNCERTAIN result with threshold=0.1, got: {[c.value for c in categories]}"
 
     def test_category_none_without_threshold(self, fitted_ar):
         """
@@ -906,22 +965,38 @@ class TestCLI:
             result = runner.invoke(
                 main,
                 [
-                    '--min_stable_attributes', '1',
-                    '--min_flexible_attributes', '1',
-                    '--min_undesired_support', '1',
-                    '--min_undesired_confidence', '0.5',
-                    '--min_desired_support', '1',
-                    '--min_desired_confidence', '0.5',
-                    '--csv_path', csv_path,
-                    '--stable_attributes', 'Sex',
-                    '--flexible_attributes', 'Class',
-                    '--target', 'Survived',
-                    '--undesired_state', '0',
-                    '--desired_state', '1',
-                    '--output_json_path', json_path,
-                    '--ci_method', 'bootstrap',
-                    '--n_bootstrap', '10',
-                    '--random_state', '42',
+                    '--min_stable_attributes',
+                    '1',
+                    '--min_flexible_attributes',
+                    '1',
+                    '--min_undesired_support',
+                    '1',
+                    '--min_undesired_confidence',
+                    '0.5',
+                    '--min_desired_support',
+                    '1',
+                    '--min_desired_confidence',
+                    '0.5',
+                    '--csv_path',
+                    csv_path,
+                    '--stable_attributes',
+                    'Sex',
+                    '--flexible_attributes',
+                    'Class',
+                    '--target',
+                    'Survived',
+                    '--undesired_state',
+                    '0',
+                    '--desired_state',
+                    '1',
+                    '--output_json_path',
+                    json_path,
+                    '--ci_method',
+                    'bootstrap',
+                    '--n_bootstrap',
+                    '10',
+                    '--random_state',
+                    '42',
                 ],
             )
             assert result.exit_code == 0, f"CLI failed with output:\n{result.output}"
@@ -956,19 +1031,32 @@ class TestCLI:
             result = runner.invoke(
                 main,
                 [
-                    '--min_stable_attributes', '1',
-                    '--min_flexible_attributes', '1',
-                    '--min_undesired_support', '1',
-                    '--min_undesired_confidence', '0.5',
-                    '--min_desired_support', '1',
-                    '--min_desired_confidence', '0.5',
-                    '--csv_path', csv_path,
-                    '--stable_attributes', 'Sex',
-                    '--flexible_attributes', 'Class',
-                    '--target', 'Survived',
-                    '--undesired_state', '0',
-                    '--desired_state', '1',
-                    '--output_json_path', json_path,
+                    '--min_stable_attributes',
+                    '1',
+                    '--min_flexible_attributes',
+                    '1',
+                    '--min_undesired_support',
+                    '1',
+                    '--min_undesired_confidence',
+                    '0.5',
+                    '--min_desired_support',
+                    '1',
+                    '--min_desired_confidence',
+                    '0.5',
+                    '--csv_path',
+                    csv_path,
+                    '--stable_attributes',
+                    'Sex',
+                    '--flexible_attributes',
+                    'Class',
+                    '--target',
+                    'Survived',
+                    '--undesired_state',
+                    '0',
+                    '--desired_state',
+                    '1',
+                    '--output_json_path',
+                    json_path,
                 ],
             )
             assert result.exit_code == 0, f"CLI failed with output:\n{result.output}"
@@ -1001,20 +1089,34 @@ class TestCLI:
             result = runner.invoke(
                 main,
                 [
-                    '--min_stable_attributes', '1',
-                    '--min_flexible_attributes', '1',
-                    '--min_undesired_support', '1',
-                    '--min_undesired_confidence', '0.5',
-                    '--min_desired_support', '1',
-                    '--min_desired_confidence', '0.5',
-                    '--csv_path', csv_path,
-                    '--stable_attributes', 'Sex',
-                    '--flexible_attributes', 'Class',
-                    '--target', 'Survived',
-                    '--undesired_state', '0',
-                    '--desired_state', '1',
-                    '--output_json_path', json_path,
-                    '--ci_method', 'analytic',
+                    '--min_stable_attributes',
+                    '1',
+                    '--min_flexible_attributes',
+                    '1',
+                    '--min_undesired_support',
+                    '1',
+                    '--min_undesired_confidence',
+                    '0.5',
+                    '--min_desired_support',
+                    '1',
+                    '--min_desired_confidence',
+                    '0.5',
+                    '--csv_path',
+                    csv_path,
+                    '--stable_attributes',
+                    'Sex',
+                    '--flexible_attributes',
+                    'Class',
+                    '--target',
+                    'Survived',
+                    '--undesired_state',
+                    '0',
+                    '--desired_state',
+                    '1',
+                    '--output_json_path',
+                    json_path,
+                    '--ci_method',
+                    'analytic',
                 ],
             )
             assert result.exit_code == 0, f"CLI failed with output:\n{result.output}"

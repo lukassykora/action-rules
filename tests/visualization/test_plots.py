@@ -20,7 +20,6 @@ import matplotlib.pyplot as plt
 from action_rules.inference.base import ConfidenceIntervalResult, RuleCategory
 from action_rules.visualization import bootstrap_histogram, forest_plot, grouped_forest_plot, posterior_plot
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -183,7 +182,7 @@ class TestForestPlot:
     def test_with_threshold_coloring(self):
         """forest_plot colour-codes rules when threshold is provided."""
         results = [
-            _make_result(rule_index=0, uplift_point=0.3, ci_lower=0.1, ci_upper=0.5),   # accept
+            _make_result(rule_index=0, uplift_point=0.3, ci_lower=0.1, ci_upper=0.5),  # accept
             _make_result(rule_index=1, uplift_point=-0.2, ci_lower=-0.4, ci_upper=-0.1),  # reject
             _make_result(rule_index=2, uplift_point=0.05, ci_lower=-0.05, ci_upper=0.15),  # uncertain
         ]

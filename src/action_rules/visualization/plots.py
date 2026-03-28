@@ -480,9 +480,7 @@ def grouped_forest_plot(
     plt = _import_matplotlib()
 
     # Collect all rule indices across all method lists.
-    all_rule_indices = sorted(
-        {r.rule_index for results in results_dict.values() for r in results}
-    )
+    all_rule_indices = sorted({r.rule_index for results in results_dict.values() for r in results})
     n_rules = len(all_rule_indices)
 
     if n_rules == 0:
