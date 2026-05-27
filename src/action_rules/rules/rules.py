@@ -183,7 +183,7 @@ class Rules:
                     # Utility
                     utility = None
                     if self.intrinsic_utility_table is not None or self.transition_utility_table is not None:
-                        (max_rule_gain, realistic_rule_gain, realistic_rule_gain_dataset) = self.compute_rule_utility(
+                        max_rule_gain, realistic_rule_gain, realistic_rule_gain_dataset = self.compute_rule_utility(
                             undesired_rule, desired_rule
                         )
                         utility = {

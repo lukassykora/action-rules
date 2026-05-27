@@ -165,6 +165,60 @@ def test_one_hot_encode_empty_stable(action_rules):
     assert set(encoded_df.columns) == set(expected_columns)
 
 
+def test_one_hot_encode_excludes_missing_stable(action_rules):
+    """NaN in a stable column must not produce a ``stable_<item_stable>_nan`` one-hot column.
+
+    Documents the pessimistic interpretation of null values for antecedents (Dardzinska 2013,
+    Section 2.3.2) — a missing stable attribute does not match any value-specific itemset.
+    """
+    df = pd.DataFrame(
+        {
+            'stable': ['a', np.nan],
+            'flexible': ['x', 'y'],
+            'target': ['yes', 'no'],
+        }
+    )
+    action_rules.set_array_library(use_gpu=False, df=df)
+    encoded_df = action_rules.one_hot_encode(df, ['stable'], ['flexible'], 'target')
+    assert 'stable_<item_stable>_a' in encoded_df.columns
+    assert 'stable_<item_stable>_nan' not in encoded_df.columns
+
+
+def test_one_hot_encode_excludes_missing_flexible(action_rules):
+    """NaN in a flexible column must not produce a ``flexible_<item_flexible>_nan`` one-hot column."""
+    df = pd.DataFrame(
+        {
+            'stable': ['a', 'b'],
+            'flexible': ['x', np.nan],
+            'target': ['yes', 'no'],
+        }
+    )
+    action_rules.set_array_library(use_gpu=False, df=df)
+    encoded_df = action_rules.one_hot_encode(df, ['stable'], ['flexible'], 'target')
+    assert 'flexible_<item_flexible>_x' in encoded_df.columns
+    assert 'flexible_<item_flexible>_nan' not in encoded_df.columns
+
+
+def test_one_hot_encode_keeps_target_missing_as_category(action_rules):
+    """NaN in the target column is preserved as its own explicit category.
+
+    Asymmetric to antecedent handling on purpose: downstream ``get_split_tables`` will then
+    cleanly exclude unlabelled rows from both the undesired and desired splits rather than
+    silently misassigning them.
+    """
+    df = pd.DataFrame(
+        {
+            'stable': ['a', 'b'],
+            'flexible': ['x', 'y'],
+            'target': ['yes', np.nan],
+        }
+    )
+    action_rules.set_array_library(use_gpu=False, df=df)
+    encoded_df = action_rules.one_hot_encode(df, ['stable'], ['flexible'], 'target')
+    assert 'target_<item_target>_yes' in encoded_df.columns
+    assert 'target_<item_target>_nan' in encoded_df.columns
+
+
 def test_get_bindings(action_rules):
     """
     Test the get_bindings method.

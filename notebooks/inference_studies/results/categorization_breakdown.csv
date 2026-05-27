@@ -1,0 +1,9 @@
+dataset,metric,n_rules,accept,uncertain,reject,accept_pct,reject_pct
+Telco Customer Churn,uplift,24,24,0,0,100.0,0.0
+Telco Customer Churn,realistic_rule_gain,24,24,0,0,100.0,0.0
+UCI Bank Marketing,uplift,24,24,0,0,100.0,0.0
+UCI Bank Marketing,realistic_rule_gain,24,24,0,0,100.0,0.0
+IBM Employee Attrition,uplift,21,20,1,0,95.2,0.0
+IBM Employee Attrition,realistic_rule_gain,21,12,1,8,57.1,38.1
+Taiwan Credit Card Default,uplift,20,20,0,0,100.0,0.0
+Taiwan Credit Card Default,realistic_rule_gain,20,20,0,0,100.0,0.0

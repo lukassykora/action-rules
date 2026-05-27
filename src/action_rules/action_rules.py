@@ -138,6 +138,9 @@ class ActionRules:
         self.is_onehot = False
         self.intrinsic_utility_table = intrinsic_utility_table or {}
         self.transition_utility_table = transition_utility_table or {}
+        self._original_intrinsic_utility_table = {}  # type: dict
+        self._original_transition_utility_table = {}  # type: dict
+        self._column_values = None  # type: Optional[dict]
 
     def count_max_nodes(self, stable_items_binding: dict, flexible_items_binding: dict) -> int:
         """
@@ -331,23 +334,41 @@ class ActionRules:
 
         Notes
         -----
-        The input data is first converted to string type to ensure consistent encoding. The stable attributes,
-        flexible attributes, and target attribute are then one-hot encoded separately and concatenated into a
-        single DataFrame.
+        Stable and flexible (antecedent) columns are cast to strings only for non-missing values; ``NaN`` is
+        preserved so that ``pd.get_dummies`` skips it instead of creating a phantom ``<attr>_<item_*>_nan``
+        category.  This implements the *pessimistic* interpretation of null values in incomplete information
+        systems --- a missing antecedent does not match any value-specific itemset and therefore cannot appear
+        in a discovered rule --- as defined for action-rule mining by Dardzinska, *Action Rules Mining*
+        (Springer 2013, Section 2.3.2).  The target column is cast to strings in full so that any ``NaN``
+        target value becomes its own explicit category (downstream ``get_split_tables`` will exclude it from
+        both the undesired and desired splits, which is the intended behaviour when callers want to ignore
+        unlabelled rows).
         """
-        data = data.astype(str)
+
+        def _prepare_antecedent_frame(frame, attributes):
+            """Stringify non-missing antecedent cells while keeping ``NaN`` as ``NaN``.
+
+            Letting ``get_dummies`` see a real ``NaN`` is the documented way to make it skip the value;
+            calling ``astype(str)`` first would convert ``np.nan`` into the literal string ``'nan'`` and
+            spawn a spurious one-hot column.
+            """
+            antecedent = frame[attributes].copy()
+            return antecedent.where(antecedent.isna(), antecedent.astype(str))
+
         to_concat = []
         if len(stable_attributes) > 0:
-            data_stable = self.pd.get_dummies(  # type: ignore
-                data[stable_attributes], sparse=False, prefix_sep='_<item_stable>_'
-            )
+            stable_frame = _prepare_antecedent_frame(data, stable_attributes)
+            data_stable = self.pd.get_dummies(stable_frame, sparse=False, prefix_sep='_<item_stable>_')  # type: ignore
             to_concat.append(data_stable)
         if len(flexible_attributes) > 0:
+            flexible_frame = _prepare_antecedent_frame(data, flexible_attributes)
             data_flexible = self.pd.get_dummies(  # type: ignore
-                data[flexible_attributes], sparse=False, prefix_sep='_<item_flexible>_'
+                flexible_frame, sparse=False, prefix_sep='_<item_flexible>_'
             )
             to_concat.append(data_flexible)
-        data_target = self.pd.get_dummies(data[[target]], sparse=False, prefix_sep='_<item_target>_')  # type: ignore
+        data_target = self.pd.get_dummies(  # type: ignore
+            data[[target]].astype(str), sparse=False, prefix_sep='_<item_target>_'
+        )
         to_concat.append(data_target)
         data = self.pd.concat(to_concat, axis=1)  # type: ignore
         return data
@@ -500,6 +521,11 @@ class ActionRules:
             columns, stable_attributes, flexible_attributes, target
         )
 
+        # Preserve original string-keyed tables before remapping to integer indices.
+        # confidence_intervals() needs the originals to pass to inference engines.
+        self._original_intrinsic_utility_table = dict(self.intrinsic_utility_table)
+        self._original_transition_utility_table = dict(self.transition_utility_table)
+        self._column_values = column_values
         self.intrinsic_utility_table, self.transition_utility_table = self.remap_utility_tables(column_values)
 
         if self.verbose:
@@ -780,6 +806,316 @@ class ActionRules:
                 predicted_row['ActionRules_Uplift'] = action_rule['uplift']
                 predicted.append(predicted_row)
         return self.pd.DataFrame(predicted)  # type: ignore
+
+    def confidence_intervals(
+        self,
+        data,
+        method: str = "bootstrap",
+        confidence_level: float = 0.95,
+        threshold: Optional[float] = None,
+        metric: str = "uplift",
+        n_bootstrap: int = 1000,
+        n_mc: int = 10000,
+        random_state: Optional[int] = None,
+        analytic_type: str = "wald",
+        bootstrap_type: str = "percentile",
+    ):
+        """Compute confidence intervals for all fitted action rules.
+
+        Applies a statistical inference engine to the provided dataset and
+        attaches confidence interval results to the output object.  Results
+        are also returned directly for immediate inspection.
+
+        Parameters
+        ----------
+        data : Union[cudf.DataFrame, pandas.DataFrame]
+            The original (pre-encoding) dataset used for inference.  Columns
+            must match the attribute names supplied during ``fit()``.
+        method : str, optional
+            CI method to use.  One of:
+
+            - ``'bootstrap'`` — non-parametric percentile bootstrap
+              (default).
+            - ``'analytic'`` or ``'wald'`` — closed-form Wald interval via
+              the delta method (requires ``scipy``).
+            - ``'bayesian'`` — Beta-Binomial conjugate model with Monte
+              Carlo posterior sampling.
+        confidence_level : float, optional
+            Nominal coverage probability, e.g. ``0.95`` (default).
+        threshold : float, optional
+            Decision boundary used to categorise rules after computing
+            intervals.  When ``None`` (default), categorisation is skipped.
+        metric : str, optional
+            Metric to use for categorisation when *threshold* is provided.
+            One of ``'uplift'`` (default) or ``'realistic_rule_gain'``.
+        n_bootstrap : int, optional
+            Number of bootstrap resamples.  Only used when
+            ``method='bootstrap'``.  Default ``1000``.
+        n_mc : int, optional
+            Number of Monte Carlo samples.  Only used when
+            ``method='bayesian'``.  Default ``10000``.
+        random_state : int, optional
+            Seed for reproducibility.  Passed to the engine when applicable.
+            ``None`` uses the global NumPy random state.
+        analytic_type : str, optional
+            Sub-type of the analytic method.  Only used when
+            ``method='analytic'`` or ``method='wald'``.  One of:
+
+            - ``'wald'`` — standard Wald normal approximation (default).
+            - ``'newcombe_wilson'`` (preferred) or ``'wilson'`` (alias) —
+              Newcombe-Wilson interval (Newcombe, 1998) for the unscaled
+              rule contrast :math:`\\delta = p_d + p_u - 1`, built by
+              combining two single-proportion Wilson score intervals; the
+              resulting interval is asymmetric.  ``'wilson'`` is retained
+              as a backward-compatible alias.
+            - ``'auto'`` — Newcombe-Wilson when sample is small (``n < 40``)
+              or proportion is extreme (``< 0.05`` or ``> 0.95``), Wald
+              otherwise (following Agresti & Coull, 1998).
+        bootstrap_type : str, optional
+            Sub-type of the bootstrap method.  Only used when
+            ``method='bootstrap'``.  One of:
+
+            - ``'percentile'`` — standard percentile bootstrap (default).
+            - ``'bca'`` — bias-corrected and accelerated (BCa) interval,
+              which adjusts for bias and skewness using jackknife
+              acceleration (Efron, 1987).
+
+        Returns
+        -------
+        list
+            List of :class:`~action_rules.inference.base.ConfidenceIntervalResult`
+            objects, one per action rule, in the same order as
+            ``self.output.action_rules``.
+
+        Raises
+        ------
+        RuntimeError
+            If the model has not been fitted yet (``self.output is None``).
+        ValueError
+            If *method* is not one of the supported values.
+
+        Notes
+        -----
+        Results are also stored on the output object via
+        ``self.output.set_confidence_intervals(results)`` so that subsequent
+        calls to ``get_ar_notation()``, ``get_pretty_ar_notation()``, and
+        ``get_export_notation()`` include the CI information.
+        """
+        if self.output is None:
+            raise RuntimeError("The model is not fit.")
+
+        if not (0 < confidence_level < 1):
+            raise ValueError("confidence_level must be strictly between 0 and 1.")
+        if n_bootstrap < 1:
+            raise ValueError("n_bootstrap must be >= 1.")
+        if n_mc < 1:
+            raise ValueError("n_mc must be >= 1.")
+        valid_analytic_types = {"wald", "wilson", "newcombe_wilson", "auto"}
+        if analytic_type not in valid_analytic_types:
+            raise ValueError(f"Unknown analytic_type '{analytic_type}'. Choose from {valid_analytic_types}.")
+        valid_bootstrap_types = {"percentile", "bca"}
+        if bootstrap_type not in valid_bootstrap_types:
+            raise ValueError(f"Unknown bootstrap_type '{bootstrap_type}'. Choose from {valid_bootstrap_types}.")
+        valid_metrics = {"uplift", "realistic_rule_gain"}
+        if metric not in valid_metrics:
+            raise ValueError(f"Unknown metric '{metric}'. Choose from {valid_metrics}.")
+
+        from .inference.base import categorize_rule, extract_rule_masks
+
+        masks = extract_rule_masks(self.output)
+
+        if method == "bootstrap":
+            from .inference.bootstrap import BootstrapEngine
+
+            engine = BootstrapEngine(n_bootstrap, random_state, bootstrap_type=bootstrap_type)
+        elif method in ("analytic", "wald"):
+            from .inference.analytic import AnalyticEngine
+
+            engine = AnalyticEngine(analytic_type=analytic_type)
+        elif method == "bayesian":
+            from .inference.bayesian import BayesianEngine
+
+            engine = BayesianEngine(n_mc, random_state=random_state)
+        else:
+            raise ValueError(
+                f"Unknown method '{method}'. Supported methods: 'bootstrap', 'analytic', 'wald', 'bayesian'."
+            )
+
+        results = engine.compute(
+            data=data,
+            rules=masks,
+            confidence_level=confidence_level,
+            intrinsic_utility_table=self._original_intrinsic_utility_table or None,
+            transition_utility_table=self._original_transition_utility_table or None,
+            column_values=self._column_values,
+        )
+
+        if threshold is not None:
+            for result in results:
+                if metric == "uplift":
+                    result.category = categorize_rule(result.uplift_ci_lower, result.uplift_ci_upper, threshold)
+                else:
+                    if result.realistic_rule_gain_ci_lower is not None:
+                        result.category = categorize_rule(
+                            result.realistic_rule_gain_ci_lower,
+                            result.realistic_rule_gain_ci_upper,
+                            threshold,
+                        )
+
+        self.output.set_confidence_intervals(results)
+        return results
+
+    def cross_validate(
+        self,
+        data,
+        stable_attributes: list,
+        flexible_attributes: list,
+        target: str,
+        target_undesired_state: str,
+        target_desired_state: str,
+        *,
+        n_splits: int = 5,
+        stratify: bool = True,
+        strategies=None,
+        metrics=None,
+        k_fraction: float = 0.2,
+        ci_method: str = 'bootstrap',
+        n_bootstrap: int = 500,
+        risk_lambda: float = 1.96,
+        confidence_level: float = 0.95,
+        random_state: Optional[int] = None,
+        n_bootstrap_oof: int = 1000,
+        bootstrap_design: str = 'cluster_fold',
+        track_stability: bool = True,
+        use_sparse_matrix: bool = False,
+        scale_support_thresholds: bool = True,
+        compute_insample_baseline: bool = False,
+    ):
+        """Run stratified K-fold cross-validation on the action-rule pipeline.
+
+        Each fold receives a fresh :class:`ActionRules` instance configured
+        with the same hyperparameters and utility tables as ``self``.  Per
+        fold, rules are mined on the train split, confidence intervals are
+        computed on the train split, and every discovered rule is re-scored
+        on the held-out test split (``test_uplift``, ``test_realistic_gain``).
+        Targeting metrics (``uplift@k``, Qini, AUUC, ``profit@k``) are
+        evaluated under several targeting strategies on the test split.
+
+        Parameters
+        ----------
+        data : pandas.DataFrame
+            The full dataset, pre-encoding.
+        stable_attributes, flexible_attributes : list of str
+        target : str
+        target_undesired_state, target_desired_state : str
+        n_splits : int, optional
+            Number of folds (default ``5``).  Must be ≥ 2.
+        stratify : bool, optional
+            Whether to stratify folds by ``target`` value (default ``True``).
+        strategies : sequence of str, optional
+            Subset of ``('point', 'lower', 'lower_positive', 'risk_adjusted')``.
+            Defaults to all four.
+        metrics : sequence of str, optional
+            Subset of ``('uplift_at_k', 'qini', 'auuc', 'profit_at_k')``.
+            Defaults to all four.
+        k_fraction : float, optional
+            Top-k cutoff used by the ``*_at_k`` metrics (default ``0.2``).
+        ci_method, n_bootstrap, confidence_level, risk_lambda : forwarded to
+            :class:`~action_rules.evaluation.cv.CrossValidator`.
+        random_state : int, optional
+            Seed for fold splitting and bootstrap CIs.
+        n_bootstrap_oof : int, optional
+            Bootstrap replicates for the across-fold rule-resampling CI.
+            Set to ``0`` to disable bootstrap CIs.
+        bootstrap_design : str, optional
+            ``'cluster_fold'`` (default) resamples rules within each fold,
+            computes the metric per fold, and averages — so the bootstrap CI
+            estimates the same fold-mean quantity as the ``mean`` column.
+            ``'oof_pool'`` (legacy) resamples within fold then concatenates
+            into one pool before computing the metric; estimates a pool-level
+            statistic that differs from the fold mean by roughly a factor of
+            K.
+        track_stability : bool, optional
+            Compute pairwise Jaccard overlap of discovered rule sets across
+            folds (default ``True``).
+        compute_insample_baseline : bool, optional
+            When ``True``, additionally mine on the full dataset and score on
+            the full dataset to compute an apparent (in-sample) performance
+            baseline; the result is stored on
+            ``CrossValidationResult.insample_summary``.  Default ``False``
+            preserves the existing return shape.
+
+        Returns
+        -------
+        action_rules.evaluation.cv.CrossValidationResult
+
+        Notes
+        -----
+        - Naive K-fold CIs based on ``mean ± 1.96·std/√K`` over folds have
+          below-nominal coverage (Bates, Hastie & Tibshirani, 2021,
+          arXiv:2104.00673).  This method therefore reports fold spread
+          (``std``) as a stability indicator and a stratified bootstrap CI
+          over OOF rule records as the inferential interval.
+        - Calling :meth:`cross_validate` does **not** require the model to
+          be fitted on the full data first.  It does not mutate ``self``;
+          each fold operates on a fresh internal instance.
+        """
+        from .evaluation.cv import METRICS, STRATEGIES, CrossValidator
+
+        # Snapshot the hyperparameters needed to build pristine per-fold instances.
+        min_stable_attributes = self.min_stable_attributes
+        min_flexible_attributes = self.min_flexible_attributes
+        # Support thresholds are absolute counts.  When mining on a train fold
+        # that is ``(n_splits-1)/n_splits`` of the full data, scale them down
+        # proportionally so the same prevalence requirements apply on each fold.
+        scale = (n_splits - 1) / n_splits if scale_support_thresholds else 1.0
+        min_undesired_support = max(1, int(round(self.min_undesired_support * scale)))
+        min_desired_support = max(1, int(round(self.min_desired_support * scale)))
+        min_undesired_confidence = self.min_undesired_confidence
+        min_desired_confidence = self.min_desired_confidence
+        verbose = self.verbose
+        intrinsic = self._original_intrinsic_utility_table or dict(self.intrinsic_utility_table)
+        transition = self._original_transition_utility_table or dict(self.transition_utility_table)
+
+        def _factory():
+            return ActionRules(
+                min_stable_attributes=min_stable_attributes,
+                min_flexible_attributes=min_flexible_attributes,
+                min_undesired_support=min_undesired_support,
+                min_undesired_confidence=min_undesired_confidence,
+                min_desired_support=min_desired_support,
+                min_desired_confidence=min_desired_confidence,
+                verbose=verbose,
+                intrinsic_utility_table=intrinsic or None,
+                transition_utility_table=transition or None,
+            )
+
+        validator = CrossValidator(
+            _factory,
+            stable_attributes=stable_attributes,
+            flexible_attributes=flexible_attributes,
+            target=target,
+            target_undesired_state=target_undesired_state,
+            target_desired_state=target_desired_state,
+            n_splits=n_splits,
+            stratify=stratify,
+            intrinsic_utility_table=intrinsic,
+            transition_utility_table=transition,
+            strategies=STRATEGIES if strategies is None else strategies,
+            metrics=METRICS if metrics is None else metrics,
+            k_fraction=k_fraction,
+            ci_method=ci_method,
+            n_bootstrap=n_bootstrap,
+            risk_lambda=risk_lambda,
+            confidence_level=confidence_level,
+            random_state=random_state,
+            n_bootstrap_oof=n_bootstrap_oof,
+            bootstrap_design=bootstrap_design,
+            track_stability=track_stability,
+            use_sparse_matrix=use_sparse_matrix,
+            compute_insample_baseline=compute_insample_baseline,
+        )
+        return validator.run(data)
 
     def remap_utility_tables(self, column_values):
         """

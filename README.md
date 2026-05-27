@@ -92,11 +92,120 @@ print(action_rules.get_rules().get_export_notation())
 $ action-rules --min_stable_attributes 2 --min_flexible_attributes 1 --min_undesired_support 1 --min_undesired_confidence 0.5 --min_desired_support 1 --min_desired_confidence 0.5 --csv_path 'data.csv' --stable_attributes 'Sex, Age' --flexible_attributes 'Class, Embarked' --target 'Survived' --undesired_state '0' --desired_state '1' --output_json_path 'output.json'
 ```
 
+### Confidence Intervals
+
+Compute confidence intervals for uplift and realistic rule gain using one of three methods: **bootstrap**, **analytic** (Wald), or **Bayesian**.
+
+```console
+$ pip install action-rules[inference]   # adds scipy
+$ pip install action-rules[viz]         # adds matplotlib + scipy
+```
+
+```python
+from action_rules import ActionRules
+
+# After fitting action rules...
+action_rules = ActionRules(
+    min_stable_attributes=2, min_flexible_attributes=1,
+    min_undesired_support=1, min_undesired_confidence=0.5,
+    min_desired_support=1, min_desired_confidence=0.5,
+)
+action_rules.fit(data, stable_attributes, flexible_attributes, target, '0', '1')
+
+# Compute bootstrap confidence intervals
+results = action_rules.confidence_intervals(
+    data,
+    method="bootstrap",      # "bootstrap", "analytic", "wald", or "bayesian"
+    confidence_level=0.95,
+    threshold=0.0,           # categorize rules as Accept/Reject/Uncertain
+    n_bootstrap=1000,        # bootstrap resamples (bootstrap only)
+    random_state=42,
+)
+
+# Each result contains: uplift_point, uplift_ci_lower, uplift_ci_upper, uplift_se,
+# realistic_rule_gain_point/ci_lower/ci_upper/se (if utility tables provided),
+# category (RuleCategory.ACCEPT / REJECT / UNCERTAIN)
+for r in results:
+    print(f"Rule {r.rule_index}: uplift = {r.uplift_point:.4f} "
+          f"[{r.uplift_ci_lower:.4f}, {r.uplift_ci_upper:.4f}] → {r.category.value}")
+
+# JSON export now includes CI data
+print(action_rules.get_rules().get_export_notation())
+```
+
+#### Visualization
+
+```python
+from action_rules.visualization import bootstrap_histogram, forest_plot, grouped_forest_plot
+
+# Single-rule distribution (bootstrap or Bayesian)
+fig = bootstrap_histogram(results[0], metric="uplift", threshold=0.0)
+fig.savefig("distribution.png")
+
+# Forest plot: all rules with CI bars
+fig = forest_plot(results, metric="uplift", threshold=0.0)
+fig.savefig("forest.png")
+
+# Compare methods side-by-side
+results_boot = action_rules.confidence_intervals(data, method="bootstrap", random_state=42)
+results_anal = action_rules.confidence_intervals(data, method="analytic")
+results_bayes = action_rules.confidence_intervals(data, method="bayesian", random_state=42)
+
+fig = grouped_forest_plot(
+    {"bootstrap": results_boot, "analytic": results_anal, "bayesian": results_bayes},
+    metric="uplift",
+    threshold=0.0,
+)
+fig.savefig("comparison.png")
+```
+
+#### CLI with Confidence Intervals
+
+``` console
+$ action-rules --min_stable_attributes 2 --min_flexible_attributes 1 \
+    --min_undesired_support 1 --min_undesired_confidence 0.5 \
+    --min_desired_support 1 --min_desired_confidence 0.5 \
+    --csv_path data.csv --stable_attributes 'Sex, Age' \
+    --flexible_attributes 'Class, Embarked' --target Survived \
+    --undesired_state 0 --desired_state 1 \
+    --ci_method bootstrap --confidence_level 0.95 --n_bootstrap 1000 \
+    --ci_threshold 0.0 --random_state 42 \
+    --output_json_path output.json
+```
+
+Available CI options:
+- `--ci_method` — `bootstrap`, `analytic`, `wald`, or `bayesian`
+- `--confidence_level` — confidence level (default: 0.95)
+- `--ci_threshold` — threshold for Accept/Reject/Uncertain categorization
+- `--n_bootstrap` — number of bootstrap resamples (default: 1000)
+- `--n_mc` — number of Monte Carlo draws for Bayesian (default: 10000)
+- `--random_state` — random seed for reproducibility
+
 ## Jupyter Notebook Examples
 
+* [Confidence Intervals (Bootstrap, Analytic, Bayesian)](https://github.com/lukassykora/action-rules/blob/main/notebooks/ConfidenceIntervals.ipynb)
 * [Titanic Dataset (GPU accelerated)](https://github.com/lukassykora/action-rules/blob/main/notebooks/Example.ipynb)
 * [Customer Churn (easy workflow)](https://github.com/lukassykora/action-rules/blob/main/notebooks/ExampleCustomerChurn.ipynb)
 * [High-Utility Action Rules Mining Example](https://github.com/lukassykora/action-rules/blob/main/notebooks/Utility.ipynb)
+
+## Hands-On Telco Tour
+
+A two-notebook end-to-end walkthrough on the Telco Customer Churn dataset. Run them in order; together they take under a minute. ([folder README](https://github.com/lukassykora/action-rules/blob/main/notebooks/telco_tour/README.md))
+
+* [End-to-end mining with utility tables, confidence intervals, and JSON export](https://github.com/lukassykora/action-rules/blob/main/notebooks/telco_tour/01_end_to_end_telco.ipynb)
+* [Visual diagnostics: churn-rate panel, bootstrap distribution, forest plot, bootstrap vs analytic CI scatter](https://github.com/lukassykora/action-rules/blob/main/notebooks/telco_tour/02_visual_diagnostics.ipynb)
+
+## Inference and Validation Studies
+
+A self-contained suite of replicability notebooks for the package's confidence-interval and cross-validation tooling. Each notebook persists a CSV under `notebooks/inference_studies/results/` so the studies can be inspected without rerunning. ([folder README](https://github.com/lukassykora/action-rules/blob/main/notebooks/inference_studies/README.md))
+
+* [Per-rule confidence intervals across five inference methods (bootstrap percentile/BCa, Wald, Wilson, Bayesian) on four benchmark datasets](https://github.com/lukassykora/action-rules/blob/main/notebooks/inference_studies/01_rule_level_confidence_intervals.ipynb)
+* [Empirical coverage simulation: do the nominal 95% intervals actually cover 95% of the time?](https://github.com/lukassykora/action-rules/blob/main/notebooks/inference_studies/02_coverage_simulation.ipynb)
+* [Runtime benchmark of every CI method on every dataset](https://github.com/lukassykora/action-rules/blob/main/notebooks/inference_studies/03_runtime_benchmark.ipynb)
+* [Rule categorization (Accept / Reject / Uncertain) for uplift and realistic rule gain](https://github.com/lukassykora/action-rules/blob/main/notebooks/inference_studies/04_rule_categorization.ipynb)
+* [Stratified K-fold cross-validation with four targeting strategies and three reliability views](https://github.com/lukassykora/action-rules/blob/main/notebooks/inference_studies/05_cross_validation.ipynb)
+* [Sensitivity of the categorization to support-threshold perturbations](https://github.com/lukassykora/action-rules/blob/main/notebooks/inference_studies/06_threshold_sensitivity.ipynb)
+* [Sensitivity of realistic rule gain to a uniform cost-side rescaling of the utility tables](https://github.com/lukassykora/action-rules/blob/main/notebooks/inference_studies/07_utility_table_sensitivity.ipynb)
 
 ## Performance
 
