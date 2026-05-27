@@ -167,3 +167,14 @@
 ## [1.0.11] - 2025-03-04
 
 * Fix: Utility
+
+## [1.1.0] - 2026-05-27
+
+* Feature: Confidence intervals for action rules via `ActionRules.confidence_intervals()` with three engines — bootstrap (percentile, BCa), analytic (Wald, Newcombe-Wilson, auto), and Bayesian (Beta-Binomial Monte Carlo).
+* Feature: Rule categorisation (`accept` / `reject` / `uncertain`) based on a user-supplied decision threshold over `uplift` or `realistic_rule_gain`.
+* Feature: Cross-validation via `ActionRules.cross_validate()` with stratified folds, configurable selection strategies, and out-of-fold metric estimation.
+* Feature: New `action_rules.visualization` module with forest plots, bootstrap distributions, coverage calibration, and CI-width diagnostics (matplotlib lazy-imported).
+* Feature: CI results are surfaced in `Output.get_ar_notation()`, `Output.get_pretty_ar_notation()`, and JSON export (`get_export_notation()`); NaN/Inf are serialised as `null`.
+* Feature: New CLI options for confidence intervals (`--ci-method`, `--ci-level`, `--ci-threshold`, `--ci-metric`, …).
+* Fix: `df_to_array` no longer creates spurious `<attr>_<item_*>_nan` one-hot columns for missing antecedent values; `NaN` is now preserved through `get_dummies` per the pessimistic null-value semantics of Dardzinska (2013, §2.3.2). Target column behaviour unchanged.
+* Docs: Notebooks for the Telco churn end-to-end tour, rule-level CIs across three datasets (Bank Marketing, Credit Card Default, Employee Attrition), and the inference studies / article figures.
