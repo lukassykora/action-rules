@@ -215,7 +215,7 @@ class Output:
             # Include utility measures if available.
             if 'realistic_rule_gain' in ar_dict:
                 rule['max_rule_gain'] = float(ar_dict['max_rule_gain'])
-                rule['realistic_rule_gain'] = int(ar_dict['realistic_rule_gain'])
+                rule['realistic_rule_gain'] = float(ar_dict['realistic_rule_gain'])
                 rule['realistic_dataset_gain'] = float(ar_dict['realistic_dataset_gain'])
             # Append CI information when available.
             if self.ci_results is not None and rule_idx < len(self.ci_results):
@@ -330,10 +330,14 @@ class Output:
 
         # Initialize the first candidate rule
         first_rule = self.action_rules[0]
-        first_rule['candidate_set'] = set(first_rule['undesired']['itemset']) | set(first_rule['desired']['itemset'])
-        first_rule['rule_index'] = 0
-        first_rule['to_delete'] = False
-        dominant_rules.append(first_rule)
+        dominant_rules.append(
+            {
+                'candidate_set': set(first_rule['undesired']['itemset']) | set(first_rule['desired']['itemset']),
+                'rule_index': 0,
+                'uplift': first_rule['uplift'],
+                'to_delete': False,
+            }
+        )
 
         # Iterate through remaining rules
         for idx, new_candidate in enumerate(self.action_rules[1:], start=1):
@@ -359,10 +363,14 @@ class Output:
             # If the candidate rule did not find any rule that would be dominant to its, add the candidate to dominant
             # rule candidates
             if is_add_rule:
-                new_candidate['to_delete'] = False
-                new_candidate['candidate_set'] = new_candidate_set
-                new_candidate['rule_index'] = idx
-                dominant_rules.append(new_candidate)
+                dominant_rules.append(
+                    {
+                        'candidate_set': new_candidate_set,
+                        'rule_index': idx,
+                        'uplift': new_candidate['uplift'],
+                        'to_delete': False,
+                    }
+                )
             # Remove rules that are not anymore dominant
             dominant_rules = [rule for rule in dominant_rules if not rule['to_delete']]
         # Sort the action rules from the highest uplift
