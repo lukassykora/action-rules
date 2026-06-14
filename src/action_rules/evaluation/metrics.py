@@ -24,6 +24,11 @@ import numpy as np
 
 ArrayLike = Union[List[float], List[int], np.ndarray]
 
+# ``np.trapezoid`` was introduced in NumPy 2.0; ``np.trapz`` is its NumPy 1.x
+# name (deprecated in 2.0). Pick whichever exists so the package works under
+# the ``numpy<2.0`` pin used in CI as well as on NumPy 2.x.
+_trapezoid = getattr(np, "trapezoid", None) or np.trapz
+
 
 def _asarray(x: ArrayLike, dtype=float) -> np.ndarray:
     """Cast ``x`` to a 1-D NumPy array of the requested dtype."""
@@ -247,7 +252,7 @@ def auuc(
     x, y = qini_curve(scores, outcomes, supports=supports)
     if x.shape[0] < 2:
         return 0.0
-    return float(np.trapezoid(y, x))
+    return float(_trapezoid(y, x))
 
 
 def qini_coefficient(
