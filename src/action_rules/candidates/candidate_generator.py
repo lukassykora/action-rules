@@ -845,7 +845,7 @@ class CandidateGenerator:
             return 0
         return int(max(0, free_bytes) * self._gpu_free_mem_fraction)
 
-    def _gpu_context_batch_size(self, requested: int) -> int:
+    def _gpu_context_batch_size(self, requested: int) -> int:  # pragma: no cover
         """How many candidate contexts (each = two packed masks) fit the GPU budget."""
         requested = max(1, int(requested))
         if self.bit_masks is not None and self.bit_masks.ndim:
@@ -1031,12 +1031,12 @@ class CandidateGenerator:
         import numpy as np
 
         x = array.astype(np.uint64, copy=True)
-        x -= (x >> 1) & np.uint64(0x5555555555555555)
-        x = (x & np.uint64(0x3333333333333333)) + ((x >> 2) & np.uint64(0x3333333333333333))
-        x = (x + (x >> 4)) & np.uint64(0x0F0F0F0F0F0F0F0F)
-        x += x >> 8
-        x += x >> 16
-        x += x >> 32
+        x -= (x >> np.uint64(1)) & np.uint64(0x5555555555555555)
+        x = (x & np.uint64(0x3333333333333333)) + ((x >> np.uint64(2)) & np.uint64(0x3333333333333333))
+        x = (x + (x >> np.uint64(4))) & np.uint64(0x0F0F0F0F0F0F0F0F)
+        x += x >> np.uint64(8)
+        x += x >> np.uint64(16)
+        x += x >> np.uint64(32)
         counts = x & np.uint64(0x7F)
         return counts.sum(axis=1).astype(np.int64, copy=False).tolist()
 
@@ -1224,8 +1224,9 @@ class CandidateGenerator:
         if undesired_mask_bitset is None or desired_mask_bitset is None:
             return undesired_states, desired_states, undesired_count, desired_count, kept_items
         active_items = self._active_flexible_items(itemset_prefix, items, stop_list_itemset)
-        item_iter: Iterable = ()
-        if active_items:
+        if not active_items:
+            item_iter: Iterable = ()
+        else:
             undesired_supports = self._bitset_support_batch(undesired_mask_bitset, active_items)
             desired_supports = self._bitset_support_batch(desired_mask_bitset, active_items)
             item_iter = zip(active_items, undesired_supports, desired_supports)

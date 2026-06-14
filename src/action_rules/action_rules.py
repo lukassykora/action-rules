@@ -655,7 +655,7 @@ class ActionRules:
             return candidate_to_expand
 
         while len(candidates_pool) > 0:
-            if use_gpu_batching:
+            if use_gpu_batching:  # pragma: no cover
                 batch: list = []
                 while candidates_pool and len(batch) < effective_gpu_node_batch_size:
                     batch.append(pop_next_candidate())
@@ -691,7 +691,7 @@ class ActionRules:
             self.rules.action_rules, target, stable_items_binding, flexible_items_binding, column_values
         )
         del data
-        if self.is_gpu_np:
+        if self.is_gpu_np:  # pragma: no cover
             gpu_pool = self.np.get_default_memory_pool()  # type: ignore[union-attr, attr-defined]
             gpu_pool.free_all_blocks()
 
