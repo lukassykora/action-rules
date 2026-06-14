@@ -3,7 +3,7 @@
 import itertools
 import warnings
 from collections import defaultdict, deque
-from typing import TYPE_CHECKING, Optional, Union  # noqa
+from typing import TYPE_CHECKING, Any, Optional, Union  # noqa
 
 from .candidates.candidate_generator import CandidateGenerator
 from .output.output import Output
@@ -457,6 +457,7 @@ class ActionRules:
         use_gpu : bool, optional
             If True, the GPU (cuDF) is used for data processing if available.
             Default is False.
+
         Notes
         -----
         This method expects boolean/binary one-hot columns.
@@ -538,6 +539,7 @@ class ActionRules:
             and ignored for backward compatibility with older call signatures.
         use_gpu : bool, optional
             Use GPU (cuDF) for data processing if available. Default is False.
+
         Raises
         ------
         RuntimeError
@@ -611,7 +613,7 @@ class ActionRules:
         }
         candidates_pool = deque([initial_candidate])
         pending_depth_counts = {0: 1}
-        min_pending_depth = 0
+        min_pending_depth: Optional[int] = 0
         max_depth_seen = 0
         next_prune_depth = 1
         self.rules = Rules(
@@ -641,9 +643,7 @@ class ActionRules:
         effective_gpu_node_batch_size = 32
 
         def pop_next_candidate() -> dict:
-            """
-            Pop one pending candidate and keep pending-depth bookkeeping in sync.
-            """
+            """Pop one pending candidate and keep pending-depth bookkeeping in sync."""
             nonlocal min_pending_depth
             candidate_to_expand = candidates_pool.popleft()
             depth = len(candidate_to_expand['ar_prefix'])
@@ -655,8 +655,8 @@ class ActionRules:
             return candidate_to_expand
 
         while len(candidates_pool) > 0:
-            if use_gpu_batching:
-                batch = []
+            if use_gpu_batching:  # pragma: no cover
+                batch: list = []
                 while candidates_pool and len(batch) < effective_gpu_node_batch_size:
                     batch.append(pop_next_candidate())
                 new_candidates = candidate_generator.generate_candidates_batch(
@@ -691,8 +691,8 @@ class ActionRules:
             self.rules.action_rules, target, stable_items_binding, flexible_items_binding, column_values
         )
         del data
-        if self.is_gpu_np:
-            gpu_pool = self.np.get_default_memory_pool()  # type: ignore[attr-defined]
+        if self.is_gpu_np:  # pragma: no cover
+            gpu_pool = self.np.get_default_memory_pool()  # type: ignore[union-attr, attr-defined]
             gpu_pool.free_all_blocks()
 
     def get_bindings(
@@ -909,7 +909,7 @@ class ActionRules:
         analytic_type: str = "wald",
         bootstrap_type: str = "percentile",
     ):
-        """Compute confidence intervals for all fitted action rules.
+        r"""Compute confidence intervals for all fitted action rules.
 
         Applies a statistical inference engine to the provided dataset and
         attaches confidence interval results to the output object.  Results
@@ -1013,6 +1013,7 @@ class ActionRules:
 
         masks = extract_rule_masks(self.output)
 
+        engine: Any
         if method == "bootstrap":
             from .inference.bootstrap import BootstrapEngine
 
@@ -1044,7 +1045,10 @@ class ActionRules:
                 if metric == "uplift":
                     result.category = categorize_rule(result.uplift_ci_lower, result.uplift_ci_upper, threshold)
                 else:
-                    if result.realistic_rule_gain_ci_lower is not None:
+                    if (
+                        result.realistic_rule_gain_ci_lower is not None
+                        and result.realistic_rule_gain_ci_upper is not None
+                    ):
                         result.category = categorize_rule(
                             result.realistic_rule_gain_ci_lower,
                             result.realistic_rule_gain_ci_upper,

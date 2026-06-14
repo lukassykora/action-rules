@@ -56,6 +56,7 @@ class DGPParams:
     p_f2: float = 0.5
 
     def prob_y(self, s1: str, s2: str, f1: str, f2: str) -> float:
+        """Return P(Y=1) for the given attribute combination under the logistic DGP."""
         z = self.intercept
         if s1 == '1':
             z += self.s1_effect
@@ -70,6 +71,7 @@ class DGPParams:
         return float(1.0 / (1.0 + np.exp(-z)))
 
     def joint_prob(self, s1: str, s2: str, f1: str, f2: str) -> float:
+        """Return the joint prior probability of the given attribute combination."""
         p_s1 = self.p_s1 if s1 == '1' else 1 - self.p_s1
         p_s2 = self.p_s2 if s2 == 'B' else 1 - self.p_s2
         p_f1 = self.p_f1 if f1 == 'y' else 1 - self.p_f1
@@ -254,7 +256,7 @@ def run_replicate(
     truths = [true_uplift(rule, column_values, params) for rule in ar.output.action_rules]
 
     records: List[CoverageRecord] = []
-    method_kwargs = {
+    method_kwargs: dict = {
         'bootstrap_percentile': dict(method='bootstrap', bootstrap_type='percentile', n_bootstrap=n_bootstrap),
         'bootstrap_bca': dict(method='bootstrap', bootstrap_type='bca', n_bootstrap=n_bootstrap),
         'wald': dict(method='analytic', analytic_type='wald'),

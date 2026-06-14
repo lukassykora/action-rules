@@ -756,7 +756,7 @@ def grouped_forest_plot(
     ax=None,
     figsize: Tuple[Optional[int], Optional[int]] = (10, None),
 ):
-    """Grouped forest plot: all rules, multiple methods overlaid.
+    """Draw a grouped forest plot: all rules, multiple methods overlaid.
 
     For each rule index present across all methods, each method is drawn at a
     small vertical offset so that markers for different methods are visually

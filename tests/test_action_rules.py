@@ -166,7 +166,7 @@ def test_one_hot_encode_empty_stable(action_rules):
 
 
 def test_one_hot_encode_excludes_missing_stable(action_rules):
-    """NaN in a stable column must not produce a ``stable_<item_stable>_nan`` one-hot column.
+    """Missing (NaN) stable values must not produce a ``stable_<item_stable>_nan`` one-hot column.
 
     Documents the pessimistic interpretation of null values for antecedents (Dardzinska 2013,
     Section 2.3.2) — a missing stable attribute does not match any value-specific itemset.
@@ -185,7 +185,7 @@ def test_one_hot_encode_excludes_missing_stable(action_rules):
 
 
 def test_one_hot_encode_excludes_missing_flexible(action_rules):
-    """NaN in a flexible column must not produce a ``flexible_<item_flexible>_nan`` one-hot column."""
+    """Missing (NaN) flexible values must not produce a ``flexible_<item_flexible>_nan`` one-hot column."""
     df = pd.DataFrame(
         {
             'stable': ['a', 'b'],
@@ -200,7 +200,7 @@ def test_one_hot_encode_excludes_missing_flexible(action_rules):
 
 
 def test_one_hot_encode_keeps_target_missing_as_category(action_rules):
-    """NaN in the target column is preserved as its own explicit category.
+    """Missing (NaN) target values are preserved as their own explicit category.
 
     Asymmetric to antecedent handling on purpose: downstream ``get_split_tables`` will then
     cleanly exclude unlabelled rows from both the undesired and desired splits rather than
@@ -279,8 +279,6 @@ def test_get_stop_list(action_rules):
     stop_list = action_rules.get_stop_list(stable_items_binding, flexible_items_binding)
     expected_stop_list = [(1, 1), (1, 2), (2, 1), (2, 2), ('attr2', 'attr2')]
     assert stop_list == expected_stop_list
-
-
 
 
 @pytest.mark.parametrize(
@@ -556,9 +554,7 @@ def test_remap_utility_tables(action_rules):
 
 
 def test_build_bit_masks_single_word(action_rules):
-    """
-    Verify that a small binary matrix is packed into a single 64-bit word per attribute.
-    """
+    """Verify that a small binary matrix is packed into a single 64-bit word per attribute."""
     action_rules.set_array_library(use_gpu=False, df=pd.DataFrame({'dummy': [0]}))
     data = np.array(
         [
@@ -577,9 +573,7 @@ def test_build_bit_masks_single_word(action_rules):
 
 
 def test_build_bit_masks_multiple_words(action_rules):
-    """
-    Verify that packing spans multiple 64-bit words when transactions exceed 64 entries.
-    """
+    """Verify that packing spans multiple 64-bit words when transactions exceed 64 entries."""
     action_rules.set_array_library(use_gpu=False, df=pd.DataFrame({'dummy': [0]}))
     data = np.zeros((2, 130), dtype=np.uint8)
     # attribute #0 hits several boundary positions
@@ -614,9 +608,7 @@ def test_build_bit_masks_multiple_words(action_rules):
 
 
 def test_fit_uses_bfs_candidate_expansion(action_rules, monkeypatch):
-    """
-    Candidate expansion should follow queue order so earlier siblings are processed first.
-    """
+    """Candidate expansion should follow queue order so earlier siblings are processed first."""
     visited_prefixes = []
 
     class DummyRules:

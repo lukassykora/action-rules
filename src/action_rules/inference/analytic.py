@@ -1,4 +1,4 @@
-"""Analytic (closed-form) confidence interval engine for action rules.
+r"""Analytic (closed-form) confidence interval engine for action rules.
 
 Supports three interval types for binomial proportions:
 
@@ -41,7 +41,7 @@ from .base import (
 
 
 class AnalyticEngine(InferenceEngine):
-    """Analytic CI engine supporting Wald and Newcombe-Wilson intervals.
+    r"""Analytic CI engine supporting Wald and Newcombe-Wilson intervals.
 
     For each action rule the engine computes closed-form confidence intervals
     for the uplift measure (and optionally for the realistic rule gain).
@@ -89,7 +89,7 @@ class AnalyticEngine(InferenceEngine):
     # ------------------------------------------------------------------
 
     def __init__(self, analytic_type: str = "wald") -> None:
-        """Initialise the engine with the chosen interval type.
+        r"""Initialise the engine with the chosen interval type.
 
         Parameters
         ----------
@@ -129,7 +129,7 @@ class AnalyticEngine(InferenceEngine):
 
     @staticmethod
     def _wilson_bounds(x: float, n: float, z: float) -> Tuple[float, float, float]:
-        """Single-proportion Wilson score interval (Wilson, 1927).
+        r"""Single-proportion Wilson score interval (Wilson, 1927).
 
         Returns the MLE point estimate together with the Wilson lower and
         upper bounds, clipped to ``[0, 1]``.
@@ -372,7 +372,7 @@ class AnalyticEngine(InferenceEngine):
                 end_hi = c_flex + target_gain * delta_upper
                 gain_lower = min(end_lo, end_hi)
                 gain_upper = max(end_lo, end_hi)
-                gain_se: Optional[float] = (gain_upper - gain_lower) / (2.0 * z) if z > 0 else 0.0
+                gain_se = (gain_upper - gain_lower) / (2.0 * z) if z > 0 else 0.0
             else:
                 gain_point = None
                 gain_lower = None

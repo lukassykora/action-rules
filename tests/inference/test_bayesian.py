@@ -117,8 +117,7 @@ class TestBayesianDeterminism:
 
 
 class TestFlatPriorLargeSample:
-    """With a flat prior and a large dataset the posterior mean should be close
-    to the empirical (frequentist) point estimate."""
+    """With a flat prior and large dataset the posterior mean nears the frequentist estimate."""
 
     def test_posterior_mean_close_to_frequentist(self):
         """Large-sample posterior mean is close to the empirical uplift."""
@@ -147,7 +146,6 @@ class TestFlatPriorLargeSample:
         posterior CI (not exactly on a boundary due to the Beta(1,1) prior
         pulling the posterior mean toward 0.5).
         """
-        rng = np.random.default_rng(17)
         n = 2000
         # Group 1: undesired antecedent, 90 % undesired target.
         n1 = n // 2
@@ -209,6 +207,7 @@ class TestWithoutUtilityTables:
     """Gain fields should be None when no utility tables are supplied."""
 
     def test_gain_fields_none(self):
+        """Verify gain fields are None when no utility tables are supplied."""
         data = _make_data()
         result = BayesianEngine(n_mc=200, random_state=0).compute(data, [_make_rule()])[0]
         assert result.realistic_rule_gain_point is None
@@ -257,6 +256,7 @@ class TestWithUtilityTables:
     """Gain fields are populated when utility tables are provided."""
 
     def test_gain_fields_populated(self):
+        """Verify gain fields are populated when utility tables are provided."""
         data = _make_data(n=200)
         intrinsic, transition = _utility_tables()
         cv = _make_column_values()
@@ -385,9 +385,11 @@ class TestZeroSupport:
         assert result.samples_uplift.shape == (n_mc,)
 
     def test_wide_interval_reflects_uncertainty(self):
-        """Prior-only posterior (flat Beta(1,1)) should produce a wide interval
-        for the underlying confidence.  We check that samples span [0, 1]
-        roughly — the mean p_d and p_u draws should each be near 0.5."""
+        """Prior-only posterior (flat Beta(1,1)) produces a wide interval.
+
+        We check that samples span [0, 1] roughly -- the mean p_d and p_u
+        draws should each be near 0.5.
+        """
         data = _make_data()
         rule = self._make_zero_support_rule()
         # With flat prior Beta(1,1) posterior draws cover [0,1] uniformly.

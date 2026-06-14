@@ -424,8 +424,7 @@ class TestMultipleRules:
         assert results[1].rule_index == 5
 
     def test_two_rules_independent(self):
-        """Results for two identical rules should be numerically identical
-        (same data, same rule, same RNG stream for each rule's resamples)."""
+        """Verify two identical rules yield numerically identical results."""
         data = _make_data()
         rule = _make_rule()
         engine = BootstrapEngine(n_bootstrap=50, random_state=0)
@@ -462,7 +461,7 @@ class TestBCaBootstrap:
         assert engine.bootstrap_type == "percentile"
 
     def test_bca_returns_list_of_correct_length(self):
-        """BCa variant returns one result per rule."""
+        """Verify the BCa variant returns one result per rule."""
         data = _make_data()
         rules = [_make_rule(0), _make_rule(1)]
         engine = BootstrapEngine(n_bootstrap=100, random_state=0, bootstrap_type="bca")
@@ -484,14 +483,14 @@ class TestBCaBootstrap:
         assert result.method == 'bootstrap'
 
     def test_bca_ci_lower_le_upper(self):
-        """BCa CI lower bound must be <= upper bound."""
+        """Verify the BCa CI lower bound is <= upper bound."""
         data = _make_data(n=300)
         engine = BootstrapEngine(n_bootstrap=300, random_state=0, bootstrap_type="bca")
         result = engine.compute(data, [_make_rule()])[0]
         assert result.uplift_ci_lower <= result.uplift_ci_upper
 
     def test_bca_non_nan_on_well_supported_rule(self):
-        """BCa CI bounds must be finite (non-NaN) for a well-supported rule."""
+        """Verify BCa CI bounds are finite (non-NaN) for a well-supported rule."""
         data = _make_data(n=300)
         engine = BootstrapEngine(n_bootstrap=300, random_state=0, bootstrap_type="bca")
         result = engine.compute(data, [_make_rule()])[0]
@@ -500,7 +499,7 @@ class TestBCaBootstrap:
         assert not math.isnan(result.uplift_ci_upper)
 
     def test_bca_nan_on_zero_support_rule(self):
-        """BCa must return NaN CI bounds when no rows match the antecedent."""
+        """Verify BCa returns NaN CI bounds when no rows match the antecedent."""
         data = _make_data()
         rule = RuleMasks(
             mask_undesired={'age': 'NONEXISTENT', 'class': '0'},
@@ -527,14 +526,14 @@ class TestBCaBootstrap:
         assert r1.uplift_ci_upper == pytest.approx(r2.uplift_ci_upper)
 
     def test_bca_accepted_category_positive_uplift(self):
-        """BCa should ACCEPT a rule with clearly positive uplift."""
+        """Verify BCa accepts a rule with clearly positive uplift."""
         data = _make_data(n=400)
         engine = BootstrapEngine(n_bootstrap=500, random_state=0, bootstrap_type="bca")
         result = engine.compute(data, [_make_rule()])[0]
         assert result.category == RuleCategory.ACCEPT
 
     def test_bca_gain_fields_populated(self):
-        """BCa gain fields are populated when utility tables are provided."""
+        """Verify BCa gain fields are populated when utility tables are provided."""
         data = _make_data(n=200)
         intrinsic = {
             ('class', '0'): -1.0,
@@ -558,7 +557,7 @@ class TestBCaBootstrap:
         assert result.realistic_rule_gain_ci_lower <= result.realistic_rule_gain_ci_upper
 
     def test_bca_vs_percentile_similar_range(self):
-        """BCa and percentile CIs on perfectly clean data should broadly agree."""
+        """Verify BCa and percentile CIs on clean data broadly agree."""
         data = _make_data(n=400)
         rule = _make_rule()
         r_pct = BootstrapEngine(n_bootstrap=500, random_state=3, bootstrap_type="percentile").compute(data, [rule])[0]

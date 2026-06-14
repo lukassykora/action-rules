@@ -738,6 +738,28 @@ class TestCategorization:
             RuleCategory.UNCERTAIN in categories
         ), f"Expected at least one UNCERTAIN result with threshold=0.1, got: {[c.value for c in categories]}"
 
+    def test_categorize_realistic_rule_gain_with_threshold(self, fitted_ar_with_utility):
+        """Categorize realistic_rule_gain results when a threshold is provided.
+
+        Exercises the realistic-gain branch of the categorization logic (not the
+        default uplift branch), which only runs when utility tables yield non-None
+        gain confidence bounds.
+
+        Asserts
+        -------
+        At least one result receives a non-None category.
+        """
+        ar, data = fitted_ar_with_utility
+        results = ar.confidence_intervals(
+            data,
+            method='bootstrap',
+            metric='realistic_rule_gain',
+            n_bootstrap=200,
+            random_state=42,
+            threshold=0.0,
+        )
+        assert any(r.category is not None for r in results)
+
     def test_category_none_without_threshold(self, fitted_ar):
         """
         Verify that category is None when threshold is not provided.

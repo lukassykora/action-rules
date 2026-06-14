@@ -9,6 +9,7 @@ import pandas as pd
 from .base import (
     ConfidenceIntervalResult,
     InferenceEngine,
+    RuleMasks,
     categorize_rule,
     compute_realistic_gain,
     compute_uplift_from_counts,
@@ -23,7 +24,7 @@ DEGENERATE_RESAMPLE_TOLERANCE = 0.01
 
 def _precompute_rule_masks(
     data: pd.DataFrame,
-    rule: object,
+    rule: RuleMasks,
 ) -> tuple:
     """Pre-compute boolean numpy arrays for a rule's conditions.
 
@@ -284,7 +285,7 @@ class BootstrapEngine(InferenceEngine):
         d_ante: np.ndarray,
         d_match: np.ndarray,
         n: int,
-        rule: object,
+        rule: RuleMasks,
         intrinsic_utility_table: Optional[dict],
         transition_utility_table: Optional[dict],
         column_values: dict,
@@ -418,6 +419,7 @@ class BootstrapEngine(InferenceEngine):
 
         results: List[ConfidenceIntervalResult] = []
 
+        rule: RuleMasks
         for rule in rules:
             # Pre-compute boolean masks once per rule so the inner loop only
             # does cheap numpy fancy-indexing and integer summation.
