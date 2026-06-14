@@ -17,7 +17,7 @@ from .base import ConfidenceIntervalResult, InferenceEngine, categorize_rule, co
 
 
 class BayesianEngine(InferenceEngine):
-    """Beta-Binomial conjugate model with Monte Carlo posterior sampling.
+    r"""Beta-Binomial conjugate model with Monte Carlo posterior sampling.
 
     For each action rule the engine updates a Beta prior with the observed
     success counts for the undesired and desired classification rules and

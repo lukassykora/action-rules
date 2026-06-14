@@ -59,13 +59,17 @@ def _factory(**overrides):
 
 
 class TestStratifiedKFoldIndices:
+    """Tests for the ``stratified_kfold_indices`` helper."""
+
     def test_partition_is_disjoint_and_covers_everything(self):
+        """Check that test folds partition every index exactly once."""
         y = np.array([0] * 30 + [1] * 20)
         splits = stratified_kfold_indices(y, n_splits=5, random_state=0)
         all_test = np.concatenate([test for _, test in splits])
         assert sorted(all_test.tolist()) == list(range(len(y)))
 
     def test_class_balance_preserved(self):
+        """Check that each fold preserves the per-class balance."""
         y = np.array([0] * 30 + [1] * 30)
         splits = stratified_kfold_indices(y, n_splits=5, random_state=0)
         for _, test in splits:
@@ -75,11 +79,13 @@ class TestStratifiedKFoldIndices:
             assert n1 == 6
 
     def test_too_few_per_class_raises(self):
+        """Check that too few members per class raises ``ValueError``."""
         y = np.array([0, 0, 1])  # only 1 class-1 sample for 5 folds
         with pytest.raises(ValueError, match="at least 5 members per class"):
             stratified_kfold_indices(y, n_splits=5)
 
     def test_seed_reproducibility(self):
+        """Check that the same random state reproduces identical folds."""
         y = np.array([0] * 30 + [1] * 30)
         s1 = stratified_kfold_indices(y, n_splits=5, random_state=7)
         s2 = stratified_kfold_indices(y, n_splits=5, random_state=7)
@@ -94,7 +100,10 @@ class TestStratifiedKFoldIndices:
 
 
 class TestCrossValidatorBasic:
+    """Basic tests for the ``CrossValidator`` run output."""
+
     def test_returns_result_type(self):
+        """Check that ``run`` returns a ``CrossValidationResult`` with expected config."""
         df = _make_dataset()
         validator = CrossValidator(
             _factory(),
@@ -115,6 +124,7 @@ class TestCrossValidatorBasic:
         assert result.metrics == METRICS
 
     def test_one_record_per_fold_rule(self):
+        """Check that rule_records totals the per-fold rule counts."""
         df = _make_dataset()
         validator = CrossValidator(
             _factory(),
@@ -132,6 +142,7 @@ class TestCrossValidatorBasic:
         assert len(result.rule_records) == sum(result.n_rules_per_fold)
 
     def test_rule_records_columns_no_utility(self):
+        """Check that without utility tables there are no gain columns and only uplift targets."""
         df = _make_dataset()
         validator = CrossValidator(
             _factory(),
@@ -154,7 +165,10 @@ class TestCrossValidatorBasic:
 
 
 class TestCrossValidatorUtility:
+    """Tests for utility-aware ``CrossValidator`` behaviour."""
+
     def test_gain_columns_present_when_utility(self):
+        """Check that supplying a utility table adds gain columns and gain targets."""
         df = _make_dataset()
         intrinsic = {('Survived', '0'): -100.0, ('Survived', '1'): 250.0}
         validator = CrossValidator(
@@ -179,7 +193,10 @@ class TestCrossValidatorUtility:
 
 
 class TestCrossValidatorDeterminism:
+    """Tests for deterministic ``CrossValidator`` runs."""
+
     def test_same_seed_same_result(self):
+        """Check that two runs with the same seed produce identical summaries."""
         df = _make_dataset()
 
         def _build():
@@ -205,7 +222,10 @@ class TestCrossValidatorDeterminism:
 
 
 class TestCrossValidatorStrategies:
+    """Tests for ``CrossValidator`` strategy selection."""
+
     def test_lower_positive_uses_only_positive_lower_bounds(self):
+        """Check that the selected strategies appear in the strategy summary."""
         df = _make_dataset()
         validator = CrossValidator(
             _factory(),
@@ -226,7 +246,10 @@ class TestCrossValidatorStrategies:
 
 
 class TestCrossValidatorValidation:
+    """Tests for ``CrossValidator`` constructor validation."""
+
     def test_n_splits_too_small(self):
+        """Check that ``n_splits`` below the minimum raises ``ValueError``."""
         with pytest.raises(ValueError, match="n_splits"):
             CrossValidator(
                 _factory(),
@@ -239,6 +262,7 @@ class TestCrossValidatorValidation:
             )
 
     def test_unknown_strategy(self):
+        """Check that an unknown strategy name raises ``ValueError``."""
         with pytest.raises(ValueError, match="Unknown strategies"):
             CrossValidator(
                 _factory(),
@@ -251,6 +275,7 @@ class TestCrossValidatorValidation:
             )
 
     def test_unknown_metric(self):
+        """Check that an unknown metric name raises ``ValueError``."""
         with pytest.raises(ValueError, match="Unknown metrics"):
             CrossValidator(
                 _factory(),
@@ -264,7 +289,10 @@ class TestCrossValidatorValidation:
 
 
 class TestRuleStability:
+    """Tests for rule stability tracking across folds."""
+
     def test_jaccard_in_unit_interval(self):
+        """Check that tracked Jaccard stability values lie within [0, 1]."""
         df = _make_dataset()
         validator = CrossValidator(
             _factory(),
@@ -284,6 +312,7 @@ class TestRuleStability:
         assert ((result.rule_stability['jaccard'] >= 0.0) & (result.rule_stability['jaccard'] <= 1.0)).all()
 
     def test_track_stability_off(self):
+        """Check that disabling stability tracking leaves rule_stability unset."""
         df = _make_dataset()
         validator = CrossValidator(
             _factory(),
@@ -303,9 +332,12 @@ class TestRuleStability:
 
 
 class TestInsampleBaseline:
-    """The apparent (in-sample) baseline reports mining + scoring on the same
-    data — by construction optimistic relative to the held-out CV mean.  Used
-    by the article to quantify the optimism gap (Hastie ESL Ch. 7)."""
+    """Tests for the apparent (in-sample) baseline.
+
+    The apparent baseline reports mining and scoring on the same data — by
+    construction optimistic relative to the held-out CV mean.  It is used by
+    the article to quantify the optimism gap (Hastie ESL Ch. 7).
+    """
 
     def _build(self, **overrides):
         kwargs = dict(
@@ -323,6 +355,7 @@ class TestInsampleBaseline:
         return CrossValidator(_factory(), **kwargs)
 
     def test_disabled_by_default(self):
+        """Check that the in-sample baseline is disabled by default."""
         df = _make_dataset()
         result = self._build().run(df)
         assert result.insample_summary is None, (
@@ -331,6 +364,7 @@ class TestInsampleBaseline:
         )
 
     def test_enabled_returns_dataframe(self):
+        """Check that enabling the baseline returns a clean summary DataFrame."""
         df = _make_dataset()
         result = self._build(compute_insample_baseline=True).run(df)
         assert result.insample_summary is not None
@@ -347,6 +381,7 @@ class TestInsampleBaseline:
         )
 
     def test_values_are_finite(self):
+        """Check that all in-sample baseline metric values are finite."""
         df = _make_dataset()
         result = self._build(compute_insample_baseline=True).run(df)
         assert result.insample_summary is not None
@@ -354,6 +389,7 @@ class TestInsampleBaseline:
         assert finite.all(), "All in-sample metric values must be finite."
 
     def test_strategy_and_metric_coverage(self):
+        """Check that the baseline covers every strategy and metric."""
         df = _make_dataset()
         result = self._build(compute_insample_baseline=True).run(df)
         assert result.insample_summary is not None
@@ -363,11 +399,14 @@ class TestInsampleBaseline:
         assert seen_metrics == set(METRICS)
 
     def test_insample_optimism_gte_cv_mean_on_uplift_at_k(self):
-        """The in-sample uplift@k is constructed by mining and scoring on the
-        same data, so it is an upper bound on the held-out CV mean by the
-        same data.  We tolerate equality (on tiny synthetic datasets the rule
-        set discovered on the full data can coincide with what each fold
-        finds, eliminating the gap)."""
+        """Check that the in-sample uplift@k is at least the held-out CV mean.
+
+        The in-sample uplift@k is constructed by mining and scoring on the
+        same data, so it is an upper bound on the held-out CV mean.  We
+        tolerate equality (on tiny synthetic datasets the rule set discovered
+        on the full data can coincide with what each fold finds, eliminating
+        the gap).
+        """
         df = _make_dataset()
         result = self._build(compute_insample_baseline=True).run(df)
         assert result.insample_summary is not None
@@ -386,6 +425,7 @@ class TestInsampleBaseline:
         assert float(is_row['value'].iloc[0]) + 1e-9 >= float(cv_row['mean'].iloc[0])
 
     def test_proxy_through_action_rules_class(self):
+        """Check that the baseline is reachable via ``ActionRules.cross_validate``."""
         df = _make_dataset()
         ar = ActionRules(
             min_stable_attributes=1,

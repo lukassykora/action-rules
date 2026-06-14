@@ -15,10 +15,15 @@ matplotlib.use('Agg')
 matplotlib = pytest.importorskip("matplotlib")
 
 # Import after confirming matplotlib is present.
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # noqa: E402
 
-from action_rules.inference.base import ConfidenceIntervalResult, RuleCategory
-from action_rules.visualization import bootstrap_histogram, forest_plot, grouped_forest_plot, posterior_plot
+from action_rules.inference.base import ConfidenceIntervalResult  # noqa: E402
+from action_rules.visualization import (  # noqa: E402
+    bootstrap_histogram,
+    forest_plot,
+    grouped_forest_plot,
+    posterior_plot,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -128,6 +133,7 @@ class TestPosteriorPlot:
     """Tests for posterior_plot."""
 
     def teardown_method(self):
+        """Close all figures after each test to keep memory usage low."""
         plt.close('all')
 
     def test_returns_figure(self):
@@ -165,6 +171,7 @@ class TestForestPlot:
     """Tests for forest_plot."""
 
     def teardown_method(self):
+        """Close all figures after each test to keep memory usage low."""
         plt.close('all')
 
     def test_returns_figure_single(self):
@@ -230,6 +237,7 @@ class TestGroupedForestPlot:
     """Tests for grouped_forest_plot."""
 
     def teardown_method(self):
+        """Close all figures after each test to keep memory usage low."""
         plt.close('all')
 
     def test_returns_figure_single_method(self):
@@ -298,12 +306,15 @@ class TestGroupedForestPlot:
 
 
 class TestXAxisNotStretchedByReferenceLines:
-    """Regression tests for the bug where threshold=0.0 or the zero reference
-    line forces the x-axis to include 0, creating a huge empty space when the
-    data is far from zero (e.g. realistic_rule_gain ~ 250).
+    """Regression tests that reference lines do not stretch the x-axis.
+
+    Covers the bug where threshold=0.0 or the zero reference line forces the
+    x-axis to include 0, creating a huge empty space when the data is far from
+    zero (e.g. realistic_rule_gain ~ 250).
     """
 
     def teardown_method(self):
+        """Close all figures after each test to keep memory usage low."""
         plt.close('all')
 
     def _make_far_from_zero_result(self, rule_index=0):

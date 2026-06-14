@@ -1,6 +1,7 @@
-"""Tests for ``ActionRules.cross_validate`` — the public method that wraps
-:class:`action_rules.evaluation.cv.CrossValidator` and uses the instance's
-own hyperparameters and utility tables.
+"""Tests for ``ActionRules.cross_validate``.
+
+The public method wraps :class:`action_rules.evaluation.cv.CrossValidator`
+and uses the instance's own hyperparameters and utility tables.
 """
 
 import numpy as np
@@ -26,7 +27,10 @@ def _make_dataset(n: int = 360, seed: int = 42) -> pd.DataFrame:
 
 
 class TestActionRulesCrossValidate:
+    """Tests for the ``ActionRules.cross_validate`` public method."""
+
     def test_returns_cross_validation_result(self):
+        """Check that ``cross_validate`` returns a populated ``CrossValidationResult``."""
         ar = ActionRules(
             min_stable_attributes=1,
             min_flexible_attributes=1,
@@ -52,6 +56,7 @@ class TestActionRulesCrossValidate:
         assert not result.strategy_summary.empty
 
     def test_utility_tables_propagated(self):
+        """Check that the instance's intrinsic utility table reaches the CV results."""
         intrinsic = {('Survived', '0'): -100.0, ('Survived', '1'): 250.0}
         ar = ActionRules(
             min_stable_attributes=1,

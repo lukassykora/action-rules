@@ -27,7 +27,7 @@ ArrayLike = Union[List[float], List[int], np.ndarray]
 # ``np.trapezoid`` was introduced in NumPy 2.0; ``np.trapz`` is its NumPy 1.x
 # name (deprecated in 2.0). Pick whichever exists so the package works under
 # the ``numpy<2.0`` pin used in CI as well as on NumPy 2.x.
-_trapezoid = getattr(np, "trapezoid", None) or np.trapz
+_trapezoid = getattr(np, "trapezoid", None) or getattr(np, "trapz")
 
 
 def _asarray(x: ArrayLike, dtype=float) -> np.ndarray:

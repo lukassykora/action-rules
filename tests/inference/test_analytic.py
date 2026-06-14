@@ -38,7 +38,7 @@ def _make_data(n: int = 200, seed: int = 0) -> pd.DataFrame:
 
 
 def _make_rule(rule_index: int = 0) -> RuleMasks:
-    """RuleMasks for: age=0 stable, class 0->1, target 0->1."""
+    """Build RuleMasks for: age=0 stable, class 0->1, target 0->1."""
     return RuleMasks(
         mask_undesired={'age': '0', 'class': '0'},
         mask_desired={'age': '0', 'class': '1'},
@@ -63,7 +63,7 @@ def _make_column_values() -> dict:
 
 
 def _make_utility_tables():
-    """Simple utility tables with known numeric values."""
+    """Build simple utility tables with known numeric values."""
     intrinsic = {
         ('class', '0'): -1.0,
         ('class', '1'): 1.0,
@@ -121,7 +121,7 @@ class TestAnalyticEngineBasic:
         assert AnalyticEngine().compute(data, []) == []
 
     def test_no_samples_stored(self):
-        """AnalyticEngine never stores sample arrays."""
+        """Verify AnalyticEngine never stores sample arrays."""
         data = _make_data()
         result = AnalyticEngine().compute(data, [_make_rule()])[0]
         assert result.samples_uplift is None
@@ -219,7 +219,7 @@ class TestAnalyticCIProperties:
         assert half_width_left == pytest.approx(half_width_right, rel=1e-9)
 
     def test_ci_lower_le_upper(self):
-        """lower bound must be <= upper bound."""
+        """Lower bound must be <= upper bound."""
         data = _make_data()
         result = AnalyticEngine().compute(data, [_make_rule()])[0]
         assert result.uplift_ci_lower <= result.uplift_ci_upper
@@ -334,6 +334,7 @@ class TestNoUtilityTables:
     """Gain fields are None when no utility tables are supplied."""
 
     def test_gain_fields_are_none(self):
+        """Verify gain fields are None when no utility tables are supplied."""
         data = _make_data()
         result = AnalyticEngine().compute(data, [_make_rule()])[0]
         assert result.realistic_rule_gain_point is None
@@ -342,6 +343,7 @@ class TestNoUtilityTables:
         assert result.realistic_rule_gain_se is None
 
     def test_samples_gain_is_none(self):
+        """Verify the gain sample array is None without utility tables."""
         data = _make_data()
         result = AnalyticEngine().compute(data, [_make_rule()])[0]
         assert result.samples_gain is None
@@ -502,6 +504,7 @@ class TestSupportAndConfidence:
     """Support and confidence should mirror the full-dataset counts."""
 
     def test_support_equals_undesired_antecedent_count(self):
+        """Verify support equals the undesired antecedent count."""
         data = _make_data(n=200)
         rule = _make_rule()
         result = AnalyticEngine().compute(data, [rule])[0]
@@ -509,6 +512,7 @@ class TestSupportAndConfidence:
         assert result.support == n_u_ante
 
     def test_confidence_matches_full_data(self):
+        """Verify confidence matches the full-dataset ratio."""
         data = _make_data(n=200)
         rule = _make_rule()
         result = AnalyticEngine().compute(data, [rule])[0]
@@ -550,6 +554,7 @@ class TestMultipleRules:
     """Multiple rules processed in one call."""
 
     def test_order_preserved(self):
+        """Verify result order matches the input rule order."""
         data = _make_data()
         rules = [_make_rule(rule_index=0), _make_rule(rule_index=5)]
         results = AnalyticEngine().compute(data, rules)
@@ -588,8 +593,7 @@ class TestWilsonScoreInterval:
         assert engine.analytic_type == "newcombe_wilson"
 
     def test_newcombe_wilson_and_wilson_alias_produce_identical_results(self):
-        """The 'wilson' alias must produce bit-for-bit identical CI values
-        to 'newcombe_wilson'."""
+        """Verify the 'wilson' alias produces identical CI values to 'newcombe_wilson'."""
         data = _make_data()
         nw = AnalyticEngine(analytic_type="newcombe_wilson").compute(data, [_make_rule()])[0]
         wn = AnalyticEngine(analytic_type="wilson").compute(data, [_make_rule()])[0]

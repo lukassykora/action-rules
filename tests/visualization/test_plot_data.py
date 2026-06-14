@@ -49,7 +49,10 @@ def _make_result(
 
 
 class TestBootstrapHistogramData:
+    """Tests for bootstrap_histogram_data."""
+
     def test_returns_required_keys(self):
+        """bootstrap_histogram_data returns all required keys."""
         data = bootstrap_histogram_data(_make_result(), bins=20)
         for key in (
             'samples',
@@ -67,28 +70,36 @@ class TestBootstrapHistogramData:
             assert key in data
 
     def test_bin_edges_length(self):
+        """bin_edges has one more entry than the number of bins."""
         data = bootstrap_histogram_data(_make_result(), bins=20)
         assert len(data['bin_edges']) == 21
 
     def test_threshold_passes_through(self):
+        """A provided threshold is passed through unchanged."""
         data = bootstrap_histogram_data(_make_result(), threshold=0.0)
         assert data['threshold'] == 0.0
 
     def test_threshold_none_passes_through(self):
+        """The threshold defaults to None when not provided."""
         data = bootstrap_histogram_data(_make_result())
         assert data['threshold'] is None
 
     def test_raises_on_missing_samples(self):
+        """A ValueError is raised when samples are None."""
         with pytest.raises(ValueError, match="samples are None"):
             bootstrap_histogram_data(_make_result(with_samples=False))
 
     def test_gain_metric(self):
+        """The realistic_rule_gain metric is reflected in the output."""
         data = bootstrap_histogram_data(_make_result(with_gain=True), metric='realistic_rule_gain')
         assert data['metric'] == 'realistic_rule_gain'
 
 
 class TestPosteriorPlotData:
+    """Tests for posterior_plot_data."""
+
     def test_returns_required_keys(self):
+        """posterior_plot_data returns all required keys."""
         scipy = pytest.importorskip("scipy")  # noqa: F841
         data = posterior_plot_data(_make_result(method='bayesian'))
         for key in (
@@ -104,24 +115,30 @@ class TestPosteriorPlotData:
             assert key in data
 
     def test_grid_shape(self):
+        """x_grid and kde_density have the requested grid shape."""
         pytest.importorskip("scipy")
         data = posterior_plot_data(_make_result(method='bayesian'), n_grid=200)
         assert data['x_grid'].shape == (200,)
         assert data['kde_density'].shape == (200,)
 
     def test_raises_on_missing_samples(self):
+        """A ValueError is raised when samples are None."""
         pytest.importorskip("scipy")
         with pytest.raises(ValueError, match="samples are None"):
             posterior_plot_data(_make_result(with_samples=False))
 
 
 class TestForestPlotData:
+    """Tests for forest_plot_data."""
+
     def test_empty_returns_zero_n(self):
+        """An empty input yields n=0 and no labels."""
         data = forest_plot_data([])
         assert data['n'] == 0
         assert data['labels'] == []
 
     def test_sorted_by_point_ascending(self):
+        """Results are sorted by point estimate in ascending order."""
         results = [
             _make_result(rule_index=0, uplift_point=0.30, ci_lower=0.20, ci_upper=0.40),
             _make_result(rule_index=1, uplift_point=0.10, ci_lower=0.00, ci_upper=0.20),
@@ -133,6 +150,7 @@ class TestForestPlotData:
         assert data['rule_indices'] == [1, 2, 0]
 
     def test_categorization_with_threshold(self):
+        """Rules are categorized as reject/uncertain/accept against a threshold."""
         results = [
             _make_result(rule_index=0, uplift_point=0.30, ci_lower=0.10, ci_upper=0.50),  # accept
             _make_result(rule_index=1, uplift_point=-0.20, ci_lower=-0.40, ci_upper=-0.10),  # reject
@@ -143,17 +161,20 @@ class TestForestPlotData:
         assert data['categories'] == ['reject', 'uncertain', 'accept']
 
     def test_categories_none_without_threshold(self):
+        """Categories are all None when no threshold is provided."""
         results = [_make_result(rule_index=i) for i in range(3)]
         data = forest_plot_data(results)
         assert data['categories'] == [None, None, None]
 
     def test_xerr_non_negative(self):
+        """Error bar magnitudes are non-negative."""
         results = [_make_result(rule_index=i, uplift_point=0.1 * i) for i in range(4)]
         data = forest_plot_data(results)
         assert all(e >= 0 for e in data['xerr_lower'])
         assert all(e >= 0 for e in data['xerr_upper'])
 
     def test_custom_labels(self):
+        """Custom labels are preserved in the output."""
         results = [_make_result(rule_index=i) for i in range(3)]
         data = forest_plot_data(results, labels=["A", "B", "C"])
         # Labels are re-sorted alongside points; checking the set is sufficient
@@ -162,23 +183,29 @@ class TestForestPlotData:
         assert set(data['labels']) == {"A", "B", "C"}
 
     def test_label_length_mismatch_raises(self):
+        """A ValueError is raised when labels length mismatches results."""
         results = [_make_result(rule_index=i) for i in range(3)]
         with pytest.raises(ValueError, match="labels has length"):
             forest_plot_data(results, labels=["A", "B"])
 
 
 class TestGroupedForestPlotData:
+    """Tests for grouped_forest_plot_data."""
+
     def test_empty_dict(self):
+        """An empty dict yields n_rules=0 and no methods."""
         data = grouped_forest_plot_data({})
         assert data['n_rules'] == 0
         assert data['methods'] == []
 
     def test_single_method_offset_is_zero(self):
+        """A single method has a zero vertical offset."""
         results_dict = {'bootstrap': [_make_result(rule_index=i) for i in range(3)]}
         data = grouped_forest_plot_data(results_dict)
         assert data['offsets'] == [0.0]
 
     def test_multiple_methods_symmetric_offsets(self):
+        """Multiple methods are assigned offsets symmetric about zero."""
         results_dict = {
             'bootstrap': [_make_result(rule_index=i) for i in range(2)],
             'analytic': [_make_result(rule_index=i, method='analytic') for i in range(2)],
@@ -189,6 +216,7 @@ class TestGroupedForestPlotData:
         assert data['offsets'][0] == -data['offsets'][-1]
 
     def test_rule_indices_union(self):
+        """rule_indices is the sorted union of indices across methods."""
         results_dict = {
             'bootstrap': [_make_result(rule_index=0), _make_result(rule_index=1)],
             'analytic': [_make_result(rule_index=1, method='analytic'), _make_result(rule_index=2, method='analytic')],
@@ -197,6 +225,7 @@ class TestGroupedForestPlotData:
         assert data['rule_indices'] == [0, 1, 2]
 
     def test_missing_rule_filled_with_none(self):
+        """A method missing a rule index has that slot filled with None."""
         results_dict = {
             'bootstrap': [_make_result(rule_index=0), _make_result(rule_index=1)],
             'analytic': [_make_result(rule_index=1, method='analytic')],

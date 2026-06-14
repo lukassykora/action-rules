@@ -1,7 +1,7 @@
 """Class Rules."""
 
 from collections import defaultdict
-from typing import Optional  # noqa
+from typing import Optional, Union  # noqa
 
 
 class Rules:
@@ -122,9 +122,7 @@ class Rules:
 
     @staticmethod
     def _add_stop_entry(stop_collection, value: tuple) -> None:
-        """
-        Add a stop entry to either a list or a set.
-        """
+        """Add a stop entry to either a list or a set."""
         if hasattr(stop_collection, "add"):
             stop_collection.add(value)
         else:
@@ -220,7 +218,7 @@ class Rules:
                         }
                     )
 
-    def prune_classification_rules(self, k: int, stop_list: list):
+    def prune_classification_rules(self, k: int, stop_list: Union[list, set]):
         """
         Prune classification rules based on their length and update the stop list.
 

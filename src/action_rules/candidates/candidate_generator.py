@@ -1,12 +1,16 @@
 """Class CandidateGenerator."""
 import itertools
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Iterable, Optional, Union
 
 from action_rules.rules import Rules
 
 if TYPE_CHECKING:
     import cupy
     import numpy
+
+# ``stop_list`` / ``stop_list_itemset`` accept either a list or a set;
+# ``_add_stop_entry`` handles both. This alias keeps that polymorphism explicit.
+StopList = Union[list, set]
 
 
 class CandidateGenerator:
@@ -58,6 +62,7 @@ class CandidateGenerator:
     in_stop_list(ar_prefix, stop_list)
         Check if the action rule prefix is in the stop list.
     """
+
     _gpu_support_kernel_multi = None
     # GPU batches are sized to fit free device memory. A candidate "context" is two
     # packed masks of `num_words` uint64 words; each worklist item costs ~32 bytes of
@@ -138,8 +143,8 @@ class CandidateGenerator:
         stable_items_binding: dict,
         flexible_items_binding: dict,
         actionable_attributes: int,
-        stop_list: list,
-        stop_list_itemset: list,
+        stop_list: StopList,
+        stop_list_itemset: StopList,
         parent_undesired_mask: Optional[Union['numpy.ndarray', 'cupy.ndarray']] = None,
         parent_desired_mask: Optional[Union['numpy.ndarray', 'cupy.ndarray']] = None,
     ) -> list:
@@ -223,13 +228,11 @@ class CandidateGenerator:
     def generate_candidates_batch(
         self,
         candidates: list,
-        stop_list: list,
-        stop_list_itemset: list,
+        stop_list: StopList,
+        stop_list_itemset: StopList,
         batch_size: int = 32,
     ) -> list:
-        """
-        Generate candidates for a batch of branches, using GPU batching when possible.
-        """
+        """Generate candidates for a batch of branches, using GPU batching when possible."""
         if not candidates:
             return []
         if not self._can_use_gpu_batching():
@@ -259,9 +262,7 @@ class CandidateGenerator:
         return new_branches_all
 
     def _can_use_gpu_batching(self) -> bool:
-        """
-        Return True when candidate batching can run on GPU bit masks.
-        """
+        """Return True when candidate batching can run on GPU bit masks."""
         if self.verbose or self.bit_masks is None:
             return False
         return hasattr(self.bit_masks, "__cuda_array_interface__")
@@ -305,8 +306,8 @@ class CandidateGenerator:
     def _flush_batch_contexts(
         self,
         batch_contexts: list,
-        stop_list: list,
-        stop_list_itemset: list,
+        stop_list: StopList,
+        stop_list_itemset: StopList,
     ) -> list:
         """Run one prepared context batch; fallback to sequential mode on failures."""
         batch_result = self._process_gpu_batch(batch_contexts, stop_list, stop_list_itemset)
@@ -321,8 +322,8 @@ class CandidateGenerator:
     def _generate_candidates_sequential(
         self,
         candidates: list,
-        stop_list: list,
-        stop_list_itemset: list,
+        stop_list: StopList,
+        stop_list_itemset: StopList,
     ) -> list:
         new_branches = []
         for candidate in candidates:
@@ -338,8 +339,8 @@ class CandidateGenerator:
     def _process_gpu_batch(
         self,
         batch_contexts: list,
-        stop_list: list,
-        stop_list_itemset: list,
+        stop_list: StopList,
+        stop_list_itemset: StopList,
     ) -> Optional[list]:
         """
         Expand a batch of candidates in one GPU support pass.
@@ -390,8 +391,8 @@ class CandidateGenerator:
     def _collect_gpu_worklist(
         self,
         batch_contexts: list,
-        stop_list: list,
-        stop_list_itemset: list,
+        stop_list: StopList,
+        stop_list_itemset: StopList,
     ) -> tuple[list, list]:
         """
         Flatten active stable/flexible items across the batch into one worklist.
@@ -447,7 +448,7 @@ class CandidateGenerator:
         context: dict,
         undesired_supports_all: list,
         desired_supports_all: list,
-        stop_list: list,
+        stop_list: StopList,
     ) -> list:
         """Turn kernel supports for stable items into new branches / stop entries."""
         new_branches: list = []
@@ -481,8 +482,8 @@ class CandidateGenerator:
         context: dict,
         undesired_supports_all: list,
         desired_supports_all: list,
-        stop_list: list,
-        stop_list_itemset: list,
+        stop_list: StopList,
+        stop_list_itemset: StopList,
     ) -> list:
         """Turn kernel supports for flexible items into new branches and classification rules."""
         new_branches: list = []
@@ -564,15 +565,13 @@ class CandidateGenerator:
 
     @staticmethod
     def _add_stop_entry(stop_collection, value: tuple) -> None:
-        """
-        Add a stop entry to a list or set without branching at call sites.
-        """
+        """Add a stop entry to a list or set without branching at call sites."""
         if hasattr(stop_collection, "add"):
             stop_collection.add(value)
         else:
             stop_collection.append(value)
 
-    def _active_stable_items(self, ar_prefix: tuple, items: list, stop_list: list) -> list:
+    def _active_stable_items(self, ar_prefix: tuple, items: list, stop_list: StopList) -> list:
         """Return stable items not blocked by `stop_list`."""
         active_items = []
         for item in items:
@@ -581,7 +580,7 @@ class CandidateGenerator:
             active_items.append(item)
         return active_items
 
-    def _active_flexible_items(self, itemset_prefix: tuple, items: list, stop_list_itemset: list) -> list:
+    def _active_flexible_items(self, itemset_prefix: tuple, items: list, stop_list_itemset: StopList) -> list:
         """Return flexible items not blocked by `stop_list_itemset`."""
         active_items = []
         for item in items:
@@ -687,7 +686,7 @@ class CandidateGenerator:
         ar_prefix: tuple,
         itemset_prefix: tuple,
         reduced_stable_items_binding: dict,
-        stop_list: list,
+        stop_list: StopList,
         stable_candidates: dict,
         new_branches: list,
         undesired_mask_bitset: Optional[Union['numpy.ndarray', 'cupy.ndarray']] = None,
@@ -783,18 +782,14 @@ class CandidateGenerator:
     def _bitset_support(
         self, mask_bitset: Union['numpy.ndarray', 'cupy.ndarray'], item: int
     ) -> int:
-        """
-        Compute support using packed bit masks by intersecting with the given mask.
-        """
+        """Compute support using packed bit masks by intersecting with the given mask."""
         attribute_mask = self.bit_masks[item]  # type: ignore[index]
         intersection = attribute_mask & mask_bitset
         return self._popcount(intersection)
 
     @staticmethod
     def _contiguous_indexer(items) -> Optional[slice]:
-        """
-        Return a slice for contiguous item indices to avoid advanced indexing copies.
-        """
+        """Return a slice for contiguous item indices to avoid advanced indexing copies."""
         if items is None:
             return None
         try:
@@ -822,9 +817,7 @@ class CandidateGenerator:
     def _bitset_support_batch(
         self, mask_bitset: Union['numpy.ndarray', 'cupy.ndarray'], items: list
     ) -> list[int]:
-        """
-        Compute support for multiple items in one packed-mask pass.
-        """
+        """Compute support for multiple items in one packed-mask pass."""
         if self.bit_masks is None or not items:
             return []
         indexer = self._contiguous_indexer(items)
@@ -855,7 +848,10 @@ class CandidateGenerator:
     def _gpu_context_batch_size(self, requested: int) -> int:
         """How many candidate contexts (each = two packed masks) fit the GPU budget."""
         requested = max(1, int(requested))
-        num_words = int(self.bit_masks.shape[-1]) if getattr(self.bit_masks, "ndim", 0) else 0
+        if self.bit_masks is not None and self.bit_masks.ndim:
+            num_words = int(self.bit_masks.shape[-1])
+        else:
+            num_words = 0
         budget = self._gpu_free_budget_bytes()
         if num_words <= 0 or budget <= 0:
             return requested
@@ -864,9 +860,7 @@ class CandidateGenerator:
 
     @classmethod
     def _get_gpu_support_kernel_multi(cls):
-        """
-        Lazily compile and cache a CUDA kernel for multi-branch batched support.
-        """
+        """Lazily compile and cache a CUDA kernel for multi-branch batched support."""
         if cls._gpu_support_kernel_multi is not None:
             return cls._gpu_support_kernel_multi
 
@@ -944,9 +938,7 @@ class CandidateGenerator:
         work_candidate_indices: list,
         work_item_indices: list,
     ) -> Optional[tuple[list[int], list[int]]]:
-        """
-        Compute support for a worklist across multiple branch masks in one kernel.
-        """
+        """Compute support for a worklist across multiple branch masks in one kernel."""
         if self.bit_masks is None or not work_item_indices:
             return None
 
@@ -1030,16 +1022,12 @@ class CandidateGenerator:
             return None
 
     def _popcount(self, mask: Union['numpy.ndarray', 'cupy.ndarray']) -> int:
-        """
-        Count the number of set bits in the packed mask.
-        """
+        """Count the number of set bits in the packed mask."""
         return self._popcount_rows(mask)[0]
 
     @staticmethod
     def _popcount_uint64_rows(array: "numpy.ndarray") -> list[int]:
-        """
-        Compute popcount per row for uint64 arrays without unpackbits.
-        """
+        """Compute popcount per row for uint64 arrays without unpackbits."""
         import numpy as np
 
         x = array.astype(np.uint64, copy=True)
@@ -1053,9 +1041,7 @@ class CandidateGenerator:
         return counts.sum(axis=1).astype(np.int64, copy=False).tolist()
 
     def _popcount_rows(self, masks: Union['numpy.ndarray', 'cupy.ndarray']) -> list[int]:
-        """
-        Count set bits row-wise for 1D/2D packed masks.
-        """
+        """Count set bits row-wise for 1D/2D packed masks."""
         import numpy as np
 
         if hasattr(masks, "__cuda_array_interface__"):
@@ -1095,8 +1081,8 @@ class CandidateGenerator:
         ar_prefix: tuple,
         itemset_prefix: tuple,
         reduced_flexible_items_binding: dict,
-        stop_list: list,
-        stop_list_itemset: list,
+        stop_list: StopList,
+        stop_list_itemset: StopList,
         flexible_candidates: dict,
         actionable_attributes: int,
         new_branches: list,
@@ -1190,7 +1176,7 @@ class CandidateGenerator:
         items: list,
         itemset_prefix: tuple,
         new_ar_prefix: tuple,
-        stop_list_itemset: list,
+        stop_list_itemset: StopList,
         flexible_candidates: dict,
         undesired_mask_bitset: Optional[Union['numpy.ndarray', 'cupy.ndarray']] = None,
         desired_mask_bitset: Optional[Union['numpy.ndarray', 'cupy.ndarray']] = None,
@@ -1230,17 +1216,16 @@ class CandidateGenerator:
         classification rules if the confidence thresholds are met. The method also removes items that do not
         meet the minimum support thresholds from the flexible candidates and updates the stop list accordingly.
         """
-        undesired_states = []
-        desired_states = []
+        undesired_states: list = []
+        desired_states: list = []
         undesired_count = 0
         desired_count = 0
-        kept_items = []
+        kept_items: list = []
         if undesired_mask_bitset is None or desired_mask_bitset is None:
             return undesired_states, desired_states, undesired_count, desired_count, kept_items
         active_items = self._active_flexible_items(itemset_prefix, items, stop_list_itemset)
-        if not active_items:
-            item_iter = ()
-        else:
+        item_iter: Iterable = ()
+        if active_items:
             undesired_supports = self._bitset_support_batch(undesired_mask_bitset, active_items)
             desired_supports = self._bitset_support_batch(desired_mask_bitset, active_items)
             item_iter = zip(active_items, undesired_supports, desired_supports)
@@ -1325,7 +1310,7 @@ class CandidateGenerator:
             new_branch['stable_items_binding'] = new_stable
             new_branch['flexible_items_binding'] = new_flexible
 
-    def in_stop_list(self, ar_prefix: tuple, stop_list: list) -> bool:
+    def in_stop_list(self, ar_prefix: tuple, stop_list: StopList) -> bool:
         """
         Check if the action rule prefix is in the stop list.
 

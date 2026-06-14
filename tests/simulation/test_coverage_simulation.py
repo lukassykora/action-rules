@@ -18,12 +18,16 @@ from tests.simulation.coverage_simulation import (
 
 
 class TestDGP:
+    """Tests for the data-generating process helpers."""
+
     def test_dataset_shape(self):
+        """Generated dataset has the expected row count and columns."""
         df = generate_dataset(500, DGPParams(), seed=0)
         assert df.shape == (500, 5)
         assert set(df.columns) == {'S1', 'S2', 'F1', 'F2', 'Y'}
 
     def test_attribute_values_in_known_set(self):
+        """Each attribute only takes values from its known categorical domain."""
         df = generate_dataset(300, DGPParams(), seed=0)
         assert set(df['S1'].unique()) <= {'0', '1'}
         assert set(df['S2'].unique()) <= {'A', 'B'}
@@ -32,11 +36,13 @@ class TestDGP:
         assert set(df['Y'].unique()) <= {'0', '1'}
 
     def test_seed_reproducibility(self):
+        """Same seed produces an identical dataset."""
         a = generate_dataset(200, DGPParams(), seed=42)
         b = generate_dataset(200, DGPParams(), seed=42)
         pd.testing.assert_frame_equal(a, b)
 
     def test_prob_y_bounds(self):
+        """Target probability stays strictly within (0, 1) for all combinations."""
         params = DGPParams()
         for s1 in ('0', '1'):
             for s2 in ('A', 'B'):
@@ -47,7 +53,10 @@ class TestDGP:
 
 
 class TestRunReplicate:
+    """Tests for a single coverage-simulation replicate."""
+
     def test_returns_records(self):
+        """A replicate on n=300 yields at least one well-formed coverage record."""
         recs = run_replicate(
             n=300,
             replicate_seed=0,
@@ -64,7 +73,10 @@ class TestRunReplicate:
 
 
 class TestRunGrid:
+    """Tests for running the full simulation grid."""
+
     def test_grid_runs_and_aggregates(self):
+        """Grid run returns records and a summary with coverage in [0, 1]."""
         recs_df, summary = run_grid(
             sample_sizes=[300],
             n_replicates=2,
@@ -82,6 +94,9 @@ class TestRunGrid:
 
 
 class TestAggregateRecords:
+    """Tests for aggregation of coverage records."""
+
     def test_empty_returns_empty_frame(self):
+        """Aggregating an empty record list returns an empty DataFrame."""
         out = aggregate_records([])
         assert out.empty

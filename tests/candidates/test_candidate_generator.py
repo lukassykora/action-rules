@@ -52,6 +52,7 @@ def _build_candidate_generator(
 
 @pytest.fixture
 def sample_generator() -> CandidateGenerator:
+    """Provide a small CandidateGenerator fixture built from a 3x4 bitset matrix."""
     data = np.array(
         [
             [1, 1, 0, 0],  # target undesired
@@ -64,12 +65,14 @@ def sample_generator() -> CandidateGenerator:
 
 
 def test_init_bitset_fields(sample_generator):
+    """Generator is initialized with populated bitset fields."""
     assert sample_generator.bit_masks is not None
     assert sample_generator.frames_bit_masks
     assert sample_generator.min_stable_attributes == 1
 
 
 def test_get_support_bitset_matches_reference():
+    """Bitset get_support matches the naive dot-product reference count."""
     data = np.array(
         [
             [1, 0, 1, 1],
@@ -88,6 +91,7 @@ def test_get_support_bitset_matches_reference():
 
 
 def test_bitset_support_batch_matches_reference():
+    """Batched bitset support matches per-item reference counts."""
     data = np.array(
         [
             [1, 0, 1, 1, 0],
@@ -106,6 +110,7 @@ def test_bitset_support_batch_matches_reference():
 
 
 def test_generate_candidates_creates_bitset_branches(sample_generator):
+    """generate_candidates produces branches carrying bitset binding metadata."""
     new_branches = sample_generator.generate_candidates(
         ar_prefix=tuple(),
         itemset_prefix=tuple(),
@@ -122,6 +127,7 @@ def test_generate_candidates_creates_bitset_branches(sample_generator):
 
 
 def test_generate_candidates_batch_matches_single(sample_generator):
+    """Batched candidate generation yields the same branches as the single-call path."""
     candidate = {
         'ar_prefix': tuple(),
         'itemset_prefix': tuple(),
@@ -147,6 +153,7 @@ def test_generate_candidates_batch_matches_single(sample_generator):
 
 
 def test_update_new_branches(sample_generator):
+    """update_new_branches attaches stable and flexible binding entries to branches."""
     new_branches = [{'item': 2}]
     stable_candidates = {'stable': [2]}
     flexible_candidates = {'flex': [2]}
@@ -156,7 +163,6 @@ def test_update_new_branches(sample_generator):
 
 
 def test_in_stop_list(sample_generator):
+    """in_stop_list reports membership of an itemset in the stop list."""
     assert sample_generator.in_stop_list((1, 2), {(1, 2)}) is True
     assert sample_generator.in_stop_list((1, 3), {(1, 2)}) is False
-
-

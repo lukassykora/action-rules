@@ -63,7 +63,7 @@ METRICS = ('uplift_at_k', 'qini', 'auuc', 'profit_at_k')
 
 @dataclass
 class CrossValidationResult:
-    """Container for the output of :class:`CrossValidator.run`.
+    r"""Container for the output of :class:`CrossValidator.run`.
 
     Attributes
     ----------
