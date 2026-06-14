@@ -1,29 +1,43 @@
 #!/usr/bin/env python
-"""Tests for `action_rules` package."""
+"""Bitset-focused tests for CandidateGenerator."""
 
 import numpy as np
+import pandas as pd
 import pytest
 
+from action_rules.action_rules import ActionRules
 from action_rules.candidates.candidate_generator import CandidateGenerator
 from action_rules.rules.rules import Rules
 
 
-@pytest.fixture
-def candidate_generator():
-    """
-    Fixture to initialize a CandidateGenerator object with preset parameters.
-
-    Returns
-    -------
-    CandidateGenerator
-        An instance of the CandidateGenerator class.
-    """
-    frames = {0: np.array([[1, 0], [0, 1]]), 1: np.array([[0, 1], [1, 0]])}
-    rules = Rules(undesired_state='0', desired_state='1', columns=['col1', 'col2'], count_transactions=2)
-    return CandidateGenerator(
-        frames=frames,
+def _build_bit_masks(data: np.ndarray) -> np.ndarray:
+    action_rules = ActionRules(
         min_stable_attributes=1,
         min_flexible_attributes=1,
+        min_undesired_support=1,
+        min_undesired_confidence=0.5,
+        min_desired_support=1,
+        min_desired_confidence=0.5,
+    )
+    action_rules.set_array_library(use_gpu=False, df=pd.DataFrame({'dummy': [0]}))
+    return action_rules.build_bit_masks(data)
+
+
+def _build_candidate_generator(
+    data: np.ndarray,
+    min_stable_attributes: int = 1,
+    min_flexible_attributes: int = 1,
+) -> CandidateGenerator:
+    bit_masks = _build_bit_masks(data)
+    rules = Rules(
+        undesired_state='0',
+        desired_state='1',
+        columns=[f'c{i}' for i in range(data.shape[0])],
+        count_transactions=data.shape[1],
+    )
+    return CandidateGenerator(
+        min_stable_attributes=min_stable_attributes,
+        min_flexible_attributes=min_flexible_attributes,
         min_undesired_support=1,
         min_desired_support=1,
         min_undesired_confidence=0.5,
@@ -31,270 +45,118 @@ def candidate_generator():
         undesired_state=0,
         desired_state=1,
         rules=rules,
-        use_sparse_matrix=False,
+        bit_masks=bit_masks,
+        frames_bit_masks={0: bit_masks[0], 1: bit_masks[1]},
     )
 
 
-def test_init(candidate_generator):
-    """
-    Test the initialization of the CandidateGenerator class.
-
-    Parameters
-    ----------
-    candidate_generator : CandidateGenerator
-        The CandidateGenerator instance to test.
-
-    Asserts
-    -------
-    Asserts that the initialization parameters are correctly set.
-    """
-    assert candidate_generator.min_stable_attributes == 1
-    assert candidate_generator.min_flexible_attributes == 1
-    assert candidate_generator.min_undesired_support == 1
-    assert candidate_generator.min_undesired_confidence == 0.5
-    assert candidate_generator.min_desired_support == 1
-    assert candidate_generator.min_desired_confidence == 0.5
-    assert candidate_generator.undesired_state == 0
-    assert candidate_generator.desired_state == 1
-    assert not candidate_generator.use_sparse_matrix
-
-
-def test_generate_candidates(candidate_generator):
-    """
-    Test the generate_candidates method.
-
-    Parameters
-    ----------
-    candidate_generator : CandidateGenerator
-        The CandidateGenerator instance to test.
-
-    Asserts
-    -------
-    Asserts that candidates are generated correctly.
-    """
-    ar_prefix = ()
-    itemset_prefix = ()
-    stable_items_binding = {'attr1': [0], 'attr2': [1]}
-    flexible_items_binding = {'attr3': [0, 1]}
-    undesired_mask = np.array([1, 0])
-    desired_mask = np.array([0, 1])
-    actionable_attributes = 1
-    stop_list = []
-    stop_list_itemset = []
-    new_branches = candidate_generator.generate_candidates(
-        ar_prefix,
-        itemset_prefix,
-        stable_items_binding,
-        flexible_items_binding,
-        undesired_mask,
-        desired_mask,
-        actionable_attributes,
-        stop_list,
-        stop_list_itemset,
-        undesired_state=0,
-        desired_state=1,
-        verbose=False,
+@pytest.fixture
+def sample_generator() -> CandidateGenerator:
+    data = np.array(
+        [
+            [1, 1, 0, 0],  # target undesired
+            [1, 0, 1, 0],  # target desired
+            [1, 1, 1, 0],  # candidate item
+        ],
+        dtype=np.uint8,
     )
-    assert isinstance(new_branches, list)
+    return _build_candidate_generator(data, min_stable_attributes=1, min_flexible_attributes=0)
 
 
-def test_get_frames(candidate_generator):
-    """
-    Test the get_frames method.
+def test_init_bitset_fields(sample_generator):
+    assert sample_generator.bit_masks is not None
+    assert sample_generator.frames_bit_masks
+    assert sample_generator.min_stable_attributes == 1
 
-    Parameters
-    ----------
-    candidate_generator : CandidateGenerator
-        The CandidateGenerator instance to test.
 
-    Asserts
-    -------
-    Asserts that frames for the undesired and desired states are returned correctly.
-    """
-    undesired_mask = np.array([1, 0])
-    desired_mask = np.array([0, 1])
-    undesired_frame, desired_frame = candidate_generator.get_frames(
-        undesired_mask, desired_mask, undesired_state=0, desired_state=1
+def test_get_support_bitset_matches_reference():
+    data = np.array(
+        [
+            [1, 0, 1, 1],
+            [0, 1, 0, 1],
+            [1, 1, 0, 0],
+        ],
+        dtype=np.uint8,
     )
-    np.testing.assert_array_equal(undesired_frame, candidate_generator.frames[0] * undesired_mask)
-    np.testing.assert_array_equal(desired_frame, candidate_generator.frames[1] * desired_mask)
+    candidate_generator = _build_candidate_generator(data)
+    mask_vector = np.array([1, 0, 1, 0], dtype=np.uint8)
+    mask_bitset = _build_bit_masks(mask_vector.reshape(1, -1))[0]
+
+    item_index = 1
+    expected_support = int(np.sum(data[item_index] * mask_vector))
+    assert candidate_generator.get_support(mask_bitset, item_index) == expected_support
 
 
-def test_reduce_candidates_by_min_attributes(candidate_generator):
-    """
-    Test the reduce_candidates_by_min_attributes method.
-
-    Parameters
-    ----------
-    candidate_generator : CandidateGenerator
-        The CandidateGenerator instance to test.
-
-    Asserts
-    -------
-    Asserts that the candidate sets are reduced correctly based on minimum attributes.
-    """
-    k = 1
-    actionable_attributes = 1
-    stable_items_binding = {'attr1': [0], 'attr2': [1]}
-    flexible_items_binding = {'attr3': [0, 1]}
-    reduced_stable, reduced_flexible = candidate_generator.reduce_candidates_by_min_attributes(
-        k, actionable_attributes, stable_items_binding, flexible_items_binding
+def test_bitset_support_batch_matches_reference():
+    data = np.array(
+        [
+            [1, 0, 1, 1, 0],
+            [0, 1, 0, 1, 1],
+            [1, 1, 0, 0, 1],
+        ],
+        dtype=np.uint8,
     )
-    assert reduced_stable == {'attr1': [0], 'attr2': [1]}
-    assert reduced_flexible == {}
+    candidate_generator = _build_candidate_generator(data)
+    mask_vector = np.array([1, 0, 1, 0, 1], dtype=np.uint8)
+    mask_bitset = _build_bit_masks(mask_vector.reshape(1, -1))[0]
+    items = [0, 1, 2]
+
+    expected_supports = [int(np.sum(data[item] * mask_vector)) for item in items]
+    assert candidate_generator._bitset_support_batch(mask_bitset, items) == expected_supports
 
 
-def test_process_stable_candidates(candidate_generator):
-    """
-    Test the process_stable_candidates method.
-
-    Parameters
-    ----------
-    candidate_generator : CandidateGenerator
-        The CandidateGenerator instance to test.
-
-    Asserts
-    -------
-    Asserts that stable candidates are processed correctly.
-    """
-    ar_prefix = ()
-    itemset_prefix = ()
-    reduced_stable_items_binding = {'attr1': [0]}
-    stop_list = []
-    stable_candidates = {'attr1': [0]}
-    undesired_frame = np.array([[1, 0], [0, 1]])
-    desired_frame = np.array([[0, 1], [1, 0]])
-    new_branches = []
-    candidate_generator.process_stable_candidates(
-        ar_prefix,
-        itemset_prefix,
-        reduced_stable_items_binding,
-        stop_list,
-        stable_candidates,
-        undesired_frame,
-        desired_frame,
-        new_branches,
-        verbose=False,
+def test_generate_candidates_creates_bitset_branches(sample_generator):
+    new_branches = sample_generator.generate_candidates(
+        ar_prefix=tuple(),
+        itemset_prefix=tuple(),
+        stable_items_binding={'stable': [2]},
+        flexible_items_binding={},
+        actionable_attributes=0,
+        stop_list=set(),
+        stop_list_itemset=set(),
     )
-    assert isinstance(new_branches, list)
+
+    assert new_branches
+    assert all('itemset_prefix' in branch for branch in new_branches)
+    assert all('stable_items_binding' in branch for branch in new_branches)
 
 
-def test_process_flexible_candidates(candidate_generator):
-    """
-    Test the process_flexible_candidates method.
+def test_generate_candidates_batch_matches_single(sample_generator):
+    candidate = {
+        'ar_prefix': tuple(),
+        'itemset_prefix': tuple(),
+        'stable_items_binding': {'stable': [2]},
+        'flexible_items_binding': {},
+        'actionable_attributes': 0,
+    }
 
-    Parameters
-    ----------
-    candidate_generator : CandidateGenerator
-        The CandidateGenerator instance to test.
-
-    Asserts
-    -------
-    Asserts that flexible candidates are processed correctly.
-    """
-    ar_prefix = ()
-    itemset_prefix = ()
-    reduced_flexible_items_binding = {'attr3': [0, 1]}
-    stop_list = []
-    stop_list_itemset = []
-    flexible_candidates = {'attr3': [0, 1]}
-    undesired_frame = np.array([[1, 0], [0, 1]])
-    desired_frame = np.array([[0, 1], [1, 0]])
-    actionable_attributes = 1
-    new_branches = []
-    candidate_generator.process_flexible_candidates(
-        ar_prefix,
-        itemset_prefix,
-        reduced_flexible_items_binding,
-        stop_list,
-        stop_list_itemset,
-        flexible_candidates,
-        undesired_frame,
-        desired_frame,
-        actionable_attributes,
-        new_branches,
-        verbose=False,
+    batched = sample_generator.generate_candidates_batch(
+        [candidate],
+        stop_list=set(),
+        stop_list_itemset=set(),
+        batch_size=8,
     )
-    assert isinstance(new_branches, list)
-
-
-def test_process_items(candidate_generator):
-    """
-    Test the process_items method.
-
-    Parameters
-    ----------
-    candidate_generator : CandidateGenerator
-        The CandidateGenerator instance to test.
-
-    Asserts
-    -------
-    Asserts that items are processed correctly to generate states and counts.
-    """
-    attribute = 'attr3'
-    items = [0, 1]
-    itemset_prefix = ()
-    new_ar_prefix = ()
-    stop_list_itemset = []
-    undesired_frame = np.array([[1, 0], [0, 1]])
-    desired_frame = np.array([[0, 1], [1, 0]])
-    flexible_candidates = {'attr3': [0, 1]}
-    verbose = False
-    undesired_states, desired_states, undesired_count, desired_count = candidate_generator.process_items(
-        attribute,
-        items,
-        itemset_prefix,
-        new_ar_prefix,
-        stop_list_itemset,
-        undesired_frame,
-        desired_frame,
-        flexible_candidates,
-        verbose,
+    single = sample_generator.generate_candidates(
+        **candidate,
+        stop_list=set(),
+        stop_list_itemset=set(),
     )
-    assert isinstance(undesired_states, list)
-    assert isinstance(desired_states, list)
-    assert isinstance(undesired_count, int)
-    assert isinstance(desired_count, int)
+
+    assert len(batched) == len(single)
+    assert [b['itemset_prefix'] for b in batched] == [s['itemset_prefix'] for s in single]
 
 
-def test_update_new_branches(candidate_generator):
-    """
-    Test the update_new_branches method.
-
-    Parameters
-    ----------
-    candidate_generator : CandidateGenerator
-        The CandidateGenerator instance to test.
-
-    Asserts
-    -------
-    Asserts that new branches are updated correctly.
-    """
-    new_branches = [{'item': 0}]
-    stable_candidates = {'attr1': [0]}
-    flexible_candidates = {'attr3': [0, 1]}
-    candidate_generator.update_new_branches(new_branches, stable_candidates, flexible_candidates)
+def test_update_new_branches(sample_generator):
+    new_branches = [{'item': 2}]
+    stable_candidates = {'stable': [2]}
+    flexible_candidates = {'flex': [2]}
+    sample_generator.update_new_branches(new_branches, stable_candidates, flexible_candidates)
     assert 'stable_items_binding' in new_branches[0]
     assert 'flexible_items_binding' in new_branches[0]
 
 
-def test_in_stop_list(candidate_generator):
-    """
-    Test the in_stop_list method.
+def test_in_stop_list(sample_generator):
+    assert sample_generator.in_stop_list((1, 2), {(1, 2)}) is True
+    assert sample_generator.in_stop_list((1, 3), {(1, 2)}) is False
 
-    Parameters
-    ----------
-    candidate_generator : CandidateGenerator
-        The CandidateGenerator instance to test.
 
-    Asserts
-    -------
-    Asserts that the stop list check is performed correctly.
-    """
-    ar_prefix = (0,)
-    stop_list = [(0,)]
-    result = candidate_generator.in_stop_list(ar_prefix, stop_list)
-    assert result is True
-    ar_prefix = (1,)
-    result = candidate_generator.in_stop_list(ar_prefix, stop_list)
-    assert result is False

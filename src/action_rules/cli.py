@@ -246,7 +246,7 @@ def main(
         str(target),
         str(undesired_state),
         str(desired_state),
-        use_gpu,
+        use_gpu=use_gpu,
     )
     if ci_method is not None:
         action_rules.confidence_intervals(

@@ -2,7 +2,7 @@
 
 import itertools
 import warnings
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import TYPE_CHECKING, Optional, Union  # noqa
 
 from .candidates.candidate_generator import CandidateGenerator
@@ -14,15 +14,13 @@ if TYPE_CHECKING:
 
     import cudf
     import cupy
-    import cupyx
     import numpy
     import pandas
-    import scipy
 
 
 class ActionRules:
     """
-    A class used to generate action rules for a given dataset.
+    Generate action rules from tabular data using one-hot encoding and bitset support counting.
 
     Attributes
     ----------
@@ -63,15 +61,12 @@ class ActionRules:
 
     Methods
     -------
-    fit(data, stable_attributes, flexible_attributes, target, undesired_state, desired_state, use_sparse_matrix=False,
-    use_gpu=False)
+    fit(data, stable_attributes, flexible_attributes, target, undesired_state, desired_state, use_gpu=False)
         Generates action rules based on the provided dataset and parameters.
     get_bindings(data, stable_attributes, flexible_attributes, target)
         Binds attributes to corresponding columns in the dataset.
     get_stop_list(stable_items_binding, flexible_items_binding)
         Generates a stop list to prevent certain combinations of attributes.
-    get_split_tables(data, target_items_binding, target)
-        Splits the dataset into tables based on target item bindings.
     get_rules()
         Returns the generated action rules if available.
     predict(frame_row)
@@ -136,6 +131,9 @@ class ActionRules:
         self.is_gpu_np = False
         self.is_gpu_pd = False
         self.is_onehot = False
+        self.bit_masks = None  # type: Optional['numpy.ndarray']
+        self.target_state_bit_masks = None  # type: Optional[dict]
+        self.frames_bit_masks = None  # type: Optional[dict]
         self.intrinsic_utility_table = intrinsic_utility_table or {}
         self.transition_utility_table = transition_utility_table or {}
         self._original_intrinsic_utility_table = {}  # type: dict
@@ -248,16 +246,14 @@ class ActionRules:
         self.is_gpu_np = is_gpu_np
         self.is_gpu_pd = is_gpu_pd
 
-    def df_to_array(self, df: Union['cudf.DataFrame', 'pandas.DataFrame'], use_sparse_matrix: bool = False) -> tuple:
+    def df_to_array(self, df: Union['cudf.DataFrame', 'pandas.DataFrame']) -> tuple:
         """
-        Convert a DataFrame to a numpy or CuPy array.
+        Convert a one-hot DataFrame to a binary array.
 
         Parameters
         ----------
         df : Union[cudf.DataFrame, pandas.DataFrame]
             The DataFrame to convert.
-        use_sparse_matrix : bool, optional
-            If True, a sparse matrix is used. Default is False.
 
         Returns
         -------
@@ -266,45 +262,89 @@ class ActionRules:
 
         Notes
         -----
-        The data is converted to an unsigned 8-bit integer array (`np.uint8`). If `use_gpu` is True,
-        the array is further converted to a CuPy array.
+        The data is converted to an unsigned 8-bit array (`np.uint8`), backed by
+        NumPy or CuPy depending on the selected cpu/gpu backend.
         """
         columns = list(df.columns)
-        # cuDF and CuPy
-        if self.is_gpu_np and self.is_gpu_pd:
-            if use_sparse_matrix:
-                from cupyx.scipy.sparse import csr_matrix
-
-                data = csr_matrix(df.values, dtype=self.np.float32).T  # type: ignore
-            else:
-                data = self.np.asarray(df.values, dtype=self.np.uint8).T  # type: ignore
-        # Pandas and CuPy
-        elif self.is_gpu_np and not self.is_gpu_pd:
-            if use_sparse_matrix:
-                from cupyx.scipy.sparse import csr_matrix
-                from scipy.sparse import csr_matrix as scipy_csr_matrix
-
-                scipy_matrix = scipy_csr_matrix(df.values).T
-                data = csr_matrix(scipy_matrix, dtype=float)
-            else:
-                data = self.np.asarray(df.values, dtype=self.np.uint8).T  # type: ignore
-        # cuDF and Numpy
-        elif not self.is_gpu_np and self.is_gpu_pd:
-            if use_sparse_matrix:
-                from scipy.sparse import csr_matrix
-
-                data = csr_matrix(df.to_numpy(), dtype=self.np.uint8).T  # type: ignore
-            else:
-                data = df.to_numpy().T  # type: ignore
-        # Pandas and Numpy
+        if self.is_gpu_np:
+            data = self.np.asarray(df.values, dtype=self.np.uint8).T  # type: ignore
+        elif self.is_gpu_pd:
+            data = df.to_numpy().T  # type: ignore
         else:
-            if use_sparse_matrix:
-                from scipy.sparse import csr_matrix
-
-                data = csr_matrix(df.values, dtype=self.np.uint8).T  # type: ignore
-            else:
-                data = df.to_numpy(dtype=self.np.uint8).T  # type: ignore
+            data = df.to_numpy(dtype=self.np.uint8).T  # type: ignore
         return data, columns
+
+    def build_bit_masks(
+        self,
+        data: Union['numpy.ndarray', 'cupy.ndarray'],
+    ) -> Union['numpy.ndarray', 'cupy.ndarray']:
+        """
+        Pack a binary feature matrix into 64-bit masks for fast intersection.
+
+        Parameters
+        ----------
+        data : Union[numpy.ndarray, cupy.ndarray]
+            Dense matrix produced by `df_to_array`, shaped (num_attributes, num_transactions)
+            and containing 0/1 values.
+
+        Returns
+        -------
+        Union[numpy.ndarray, cupy.ndarray]
+            bit_masks is a uint64 array with shape (num_attributes, num_words)
+            holding 64 bits/transactions for each item.
+
+        Notes
+        -----
+        - The packing uses 64-bit little-endian words (bit 0 corresponds to the
+          first transaction in each chunk).
+        - Sparse inputs are not supported; callers should densify before packing.
+        """
+        if self.np is None:
+            raise RuntimeError("Array library is not initialised. Call set_array_library first.")
+        # Shape is (num_attributes, num_transactions).
+        num_attributes, num_transactions = data.shape
+        num_words = (num_transactions + 63) // 64
+        padded_transactions = num_words * 64
+        padding = padded_transactions - num_transactions
+
+        if padding > 0:
+            pad_block = self.np.zeros((num_attributes, padding), dtype=data.dtype)
+            padded_data = self.np.concatenate((data, pad_block), axis=1)
+        else:
+            padded_data = data
+
+        # Group transactions into 64-bit chunks: (num_attributes, num_words, 64).
+        chunks = padded_data.reshape(num_attributes, num_words, 64).astype(self.np.uint64, copy=False)
+        bit_offsets = self.np.arange(64, dtype=self.np.uint64)
+        bit_weights = self.np.left_shift(self.np.uint64(1), bit_offsets)
+
+        # Pack each 64-sized transaction chunk into one uint64 word.
+        bit_masks = self.np.tensordot(chunks, bit_weights, axes=([2], [0])).astype(self.np.uint64, copy=False)
+        return bit_masks
+
+    def _cache_bitset_structures(
+        self,
+        bit_masks: Union['numpy.ndarray', 'cupy.ndarray'],
+        target_items_binding: dict,
+        target: str,
+    ) -> None:
+        """
+        Save all column masks; extract target-state rows into a separate dict.
+
+        Parameters
+        ----------
+        bit_masks : Union[numpy.ndarray, cupy.ndarray]
+            Packed transaction masks for every attribute/value.
+        target_items_binding : dict
+            Mapping from target attribute name to indices of its one-hot columns.
+        target : str
+            Name of the target attribute.
+        """
+        target_state_indices = target_items_binding.get(target, [])
+        target_state_bit_masks = {index: bit_masks[index] for index in target_state_indices}
+
+        self.bit_masks = bit_masks
+        self.target_state_bit_masks = target_state_bit_masks
 
     def one_hot_encode(
         self,
@@ -314,7 +354,7 @@ class ActionRules:
         target: str,
     ) -> Union['cudf.DataFrame', 'pandas.DataFrame']:
         """
-        Perform one-hot encoding on the specified stable, flexible, and target attributes of the DataFrame.
+        Perform one-hot encoding on the attributes of the DataFrame.
 
         Parameters
         ----------
@@ -340,9 +380,9 @@ class ActionRules:
         systems --- a missing antecedent does not match any value-specific itemset and therefore cannot appear
         in a discovered rule --- as defined for action-rule mining by Dardzinska, *Action Rules Mining*
         (Springer 2013, Section 2.3.2).  The target column is cast to strings in full so that any ``NaN``
-        target value becomes its own explicit category (downstream ``get_split_tables`` will exclude it from
-        both the undesired and desired splits, which is the intended behaviour when callers want to ignore
-        unlabelled rows).
+        target value becomes its own explicit category (downstream ``get_split_bit_masks`` will exclude it
+        from both the undesired and desired splits, which is the intended behaviour when callers want to
+        ignore unlabelled rows).
         """
 
         def _prepare_antecedent_frame(frame, attributes):
@@ -383,14 +423,14 @@ class ActionRules:
         target_desired_state: str,
         use_sparse_matrix: bool = False,
         use_gpu: bool = False,
+        **kwargs,
     ):
         """
-        Preprocess and fit the model using one-hot encoded attributes.
+        Fit the model when input data is already one-hot encoded.
 
-        This method prepares the dataset for generating action rules by
-        performing one-hot encoding on the specified stable, flexible,
-        and target attributes. The resulting dataset is then used to fit
-        the model using the `fit` method.
+        The method remaps one-hot columns to the internal naming convention
+        (`_<item_stable>_`, `_<item_flexible>_`, `_<item_target>_`), drops
+        unrelated columns, and forwards execution to `fit`.
 
         Parameters
         ----------
@@ -410,21 +450,16 @@ class ActionRules:
         target_desired_state : str
             The desired state of the target attribute, used in action rule generation.
         use_sparse_matrix : bool, optional
-            If True, a sparse matrix is used in the fitting process. Default is False.
+            Kept for backward compatibility with action-rules <= 1.0.11. The bitset
+            backend supersedes sparse matrices, so this flag is accepted and ignored.
+            Other unrecognized keyword arguments (``**kwargs``) are likewise accepted
+            and ignored for backward compatibility with older call signatures.
         use_gpu : bool, optional
             If True, the GPU (cuDF) is used for data processing if available.
             Default is False.
-
         Notes
         -----
-        The method modifies the dataset by:
-        1. Renaming columns according to the stable, flexible, and target attributes.
-        2. Removing columns that are not associated with any of these attributes.
-        3. Passing the processed dataset and relevant attribute lists to the `fit` method
-           to generate action rules.
-
-        This method ensures that the dataset is correctly preprocessed for rule
-        generation, focusing on the specified attributes and their one-hot encoded forms.
+        This method expects boolean/binary one-hot columns.
         """
         self.is_onehot = True
         data = data.copy()
@@ -463,8 +498,8 @@ class ActionRules:
             attribute_target,
             target_undesired_state,
             target_desired_state,
-            use_sparse_matrix,
-            use_gpu,
+            use_sparse_matrix=use_sparse_matrix,
+            use_gpu=use_gpu,
         )
 
     def fit(
@@ -477,9 +512,10 @@ class ActionRules:
         target_desired_state: str,
         use_sparse_matrix: bool = False,
         use_gpu: bool = False,
+        **kwargs,
     ):
         """
-        Generate action rules based on the provided dataset and parameters.
+        Generate action rules for the provided dataset.
 
         Parameters
         ----------
@@ -496,10 +532,12 @@ class ActionRules:
         target_desired_state : str
             The desired state of the target attribute.
         use_sparse_matrix : bool, optional
-            If True, a sparse matrix is used. Default is False.
+            Kept for backward compatibility with action-rules <= 1.0.11. The bitset
+            backend supersedes sparse matrices, so this flag is accepted and ignored.
+            Other unrecognized keyword arguments (``**kwargs``) are likewise accepted
+            and ignored for backward compatibility with older call signatures.
         use_gpu : bool, optional
             Use GPU (cuDF) for data processing if available. Default is False.
-
         Raises
         ------
         RuntimeError
@@ -507,15 +545,33 @@ class ActionRules:
 
         Notes
         -----
-        This method performs one-hot encoding on the specified attributes, converts the DataFrame to an array,
-        and generates action rules by iterating over candidate rules and pruning them based on the given parameters.
+        The method runs one-hot encoding (when needed), packs bit masks, explores
+        candidate branches, prunes classification rules by depth, and finally
+        materializes action rules.
         """
         if self.output is not None:
             raise RuntimeError("The model is already fit.")
+        if use_sparse_matrix:
+            warnings.warn(
+                "The 'use_sparse_matrix' parameter is obsolete and has no effect: action-rules now "
+                "always uses the packed-bitset backend.",
+                UserWarning,
+                stacklevel=2,
+            )
+        # Forward tolerance: legacy callers passed use_gpu="auto" for backend
+        # autoselection. That harness lives outside the package now, so treat any
+        # truthy string as a plain GPU request instead of raising.
+        if isinstance(use_gpu, str):
+            use_gpu = use_gpu.strip().lower() not in ("", "false", "cpu", "no", "0")
+
+        # reset cached bitset structures before fitting a new model
+        self.bit_masks = None
+        self.target_state_bit_masks = None
+        self.frames_bit_masks = None
         self.set_array_library(use_gpu, data)
         if not self.is_onehot:
             data = self.one_hot_encode(data, stable_attributes, flexible_attributes, target)
-        data, columns = self.df_to_array(data, use_sparse_matrix)
+        data, columns = self.df_to_array(data)
 
         stable_items_binding, flexible_items_binding, target_items_binding, column_values = self.get_bindings(
             columns, stable_attributes, flexible_attributes, target
@@ -528,30 +584,36 @@ class ActionRules:
         self._column_values = column_values
         self.intrinsic_utility_table, self.transition_utility_table = self.remap_utility_tables(column_values)
 
+        local_bit_masks = self.build_bit_masks(data)
+        self._cache_bitset_structures(local_bit_masks, target_items_binding, target)
+        self.frames_bit_masks = self.get_split_bit_masks(target_items_binding, target)
+
         if self.verbose:
             print('Maximum number of nodes to check for support:')
             print('_____________________________________________')
             print(self.count_max_nodes(stable_items_binding, flexible_items_binding))
             print('')
-        stop_list = self.get_stop_list(stable_items_binding, flexible_items_binding)
-        frames = self.get_split_tables(data, target_items_binding, target, use_sparse_matrix)
+        use_gpu_batching = bool(self.is_gpu_np and self.bit_masks is not None and self.frames_bit_masks)
+
+        # Set membership is hot in candidate pruning; use a set internally for O(1) lookups.
+        stop_list = set(self.get_stop_list(stable_items_binding, flexible_items_binding))
         undesired_state = columns.index(target + '_<item_target>_' + str(target_undesired_state))
         desired_state = columns.index(target + '_<item_target>_' + str(target_desired_state))
 
-        stop_list_itemset = []  # type: list
+        stop_list_itemset = set()  # type: set
 
-        candidates_queue = [
-            {
-                'ar_prefix': tuple(),
-                'itemset_prefix': tuple(),
-                'stable_items_binding': stable_items_binding,
-                'flexible_items_binding': flexible_items_binding,
-                'undesired_mask': None,
-                'desired_mask': None,
-                'actionable_attributes': 0,
-            }
-        ]
-        k = 0
+        initial_candidate = {
+            'ar_prefix': tuple(),
+            'itemset_prefix': tuple(),
+            'stable_items_binding': stable_items_binding,
+            'flexible_items_binding': flexible_items_binding,
+            'actionable_attributes': 0,
+        }
+        candidates_pool = deque([initial_candidate])
+        pending_depth_counts = {0: 1}
+        min_pending_depth = 0
+        max_depth_seen = 0
+        next_prune_depth = 1
         self.rules = Rules(
             undesired_state,
             desired_state,
@@ -561,39 +623,77 @@ class ActionRules:
             self.transition_utility_table,
         )
         candidate_generator = CandidateGenerator(
-            frames,
-            self.min_stable_attributes,
-            self.min_flexible_attributes,
-            self.min_undesired_support,
-            self.min_desired_support,
-            self.min_undesired_confidence,
-            self.min_desired_confidence,
-            undesired_state,
-            desired_state,
-            self.rules,
-            use_sparse_matrix,
+            frames_bit_masks=self.frames_bit_masks,
+            bit_masks=self.bit_masks,
+            min_stable_attributes=self.min_stable_attributes,
+            min_flexible_attributes=self.min_flexible_attributes,
+            min_undesired_support=self.min_undesired_support,
+            min_desired_support=self.min_desired_support,
+            min_undesired_confidence=self.min_undesired_confidence,
+            min_desired_confidence=self.min_desired_confidence,
+            undesired_state=undesired_state,
+            desired_state=desired_state,
+            rules=self.rules,
+            verbose=self.verbose,
         )
-        while len(candidates_queue) > 0:
-            candidate = candidates_queue.pop(0)
-            if len(candidate['ar_prefix']) > k:
-                k += 1
-                self.rules.prune_classification_rules(k, stop_list)
-            new_candidates = candidate_generator.generate_candidates(
-                **candidate,
-                stop_list=stop_list,
-                stop_list_itemset=stop_list_itemset,
-                undesired_state=undesired_state,
-                desired_state=desired_state,
-                verbose=self.verbose,
-            )
-            candidates_queue += new_candidates
+        # Default GPU node batch; the adaptive VRAM budgeting in CandidateGenerator
+        # shrinks this automatically to fit available device memory.
+        effective_gpu_node_batch_size = 32
+
+        def pop_next_candidate() -> dict:
+            """
+            Pop one pending candidate and keep pending-depth bookkeeping in sync.
+            """
+            nonlocal min_pending_depth
+            candidate_to_expand = candidates_pool.popleft()
+            depth = len(candidate_to_expand['ar_prefix'])
+            pending_depth_counts[depth] -= 1
+            if pending_depth_counts[depth] <= 0:
+                pending_depth_counts.pop(depth, None)
+                if depth == min_pending_depth:
+                    min_pending_depth = min(pending_depth_counts.keys(), default=None)
+            return candidate_to_expand
+
+        while len(candidates_pool) > 0:
+            if use_gpu_batching:
+                batch = []
+                while candidates_pool and len(batch) < effective_gpu_node_batch_size:
+                    batch.append(pop_next_candidate())
+                new_candidates = candidate_generator.generate_candidates_batch(
+                    batch,
+                    stop_list=stop_list,
+                    stop_list_itemset=stop_list_itemset,
+                    batch_size=effective_gpu_node_batch_size,
+                )
+            else:
+                candidate = pop_next_candidate()
+                new_candidates = candidate_generator.generate_candidates(
+                    **candidate,
+                    stop_list=stop_list,
+                    stop_list_itemset=stop_list_itemset,
+                )
+            if new_candidates:
+                candidates_pool.extend(new_candidates)
+                for new_candidate in new_candidates:
+                    new_depth = len(new_candidate['ar_prefix'])
+                    pending_depth_counts[new_depth] = pending_depth_counts.get(new_depth, 0) + 1
+                    if min_pending_depth is None or new_depth < min_pending_depth:
+                        min_pending_depth = new_depth
+                    if new_depth > max_depth_seen:
+                        max_depth_seen = new_depth
+            while next_prune_depth <= max_depth_seen and (
+                min_pending_depth is None or min_pending_depth >= next_prune_depth
+            ):
+                self.rules.prune_classification_rules(next_prune_depth, stop_list)
+                next_prune_depth += 1
         self.rules.generate_action_rules()
         self.output = Output(
             self.rules.action_rules, target, stable_items_binding, flexible_items_binding, column_values
         )
         del data
         if self.is_gpu_np:
-            self.np.get_default_memory_pool().free_all_blocks()  # type: ignore
+            gpu_pool = self.np.get_default_memory_pool()  # type: ignore[attr-defined]
+            gpu_pool.free_all_blocks()
 
     def get_bindings(
         self,
@@ -603,7 +703,7 @@ class ActionRules:
         target: str,
     ) -> tuple:
         """
-        Bind attributes to corresponding columns in the dataset.
+        Bind stable/flexible/target attribute to corresponding column in the dataset.
 
         Parameters
         ----------
@@ -685,44 +785,33 @@ class ActionRules:
             stop_list.append(tuple([item, item]))
         return stop_list
 
-    def get_split_tables(
-        self,
-        data: Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix', 'scipy.sparse.csr_matrix'],
-        target_items_binding: dict,
-        target: str,
-        use_sparse_matrix: bool = False,
-    ) -> dict:
+    def get_split_bit_masks(self, target_items_binding: dict, target: str) -> dict:
         """
-        Split the dataset into tables based on target item bindings.
+        Return packed bit-mask rows for each target state.
 
         Parameters
         ----------
-        data : Union['numpy.ndarray', 'cupy.ndarray', 'cupyx.scipy.sparse.csr_matrix', 'scipy.sparse.csr_matrix']
-            The dataset to be split.
         target_items_binding : dict
-            Dictionary containing bindings for target items.
+            Indexes of target attributes columns in one-hot table.
         target : str
-            The target attribute.
-        use_sparse_matrix : bool, optional
-            If True, a sparse matrix is used. Default is False.
+            Name of the target attribute.
 
         Returns
         -------
         dict
-            A dictionary containing the split tables.
+            Dictionary mapping target attributes to the corresponding packed mask rows.
 
         Notes
         -----
-        The method creates masks for the target items and splits the data accordingly.
+        Requires that `build_bit_masks` has been executed beforehand.
         """
-        frames = {}
-        for item in target_items_binding[target]:
-            mask = data[item] == 1
-            if use_sparse_matrix:
-                frames[item] = data.multiply(mask)  # type: ignore
-            else:
-                frames[item] = data[:, mask]
-        return frames
+        if self.bit_masks is None:
+            raise RuntimeError("Bit masks are not available. Ensure fit() was run first.")
+
+        target_state_masks = {}
+        for item_index in target_items_binding.get(target, []):
+            target_state_masks[item_index] = self.bit_masks[item_index]
+        return target_state_masks
 
     def get_rules(self) -> Output:
         """

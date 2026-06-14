@@ -281,25 +281,6 @@ def test_get_stop_list(action_rules):
     assert stop_list == expected_stop_list
 
 
-def test_get_split_tables(action_rules):
-    """
-    Test the get_split_tables method.
-
-    Parameters
-    ----------
-    action_rules : ActionRules
-        The ActionRules instance to test.
-
-    Asserts
-    -------
-    Asserts that the dataset is correctly split into tables based on target item bindings.
-    """
-    data = np.array([[1, 0, 0], [1, 0, 0], [0, 1, 0], [1, 0, 1]])
-    target_items_binding = {'target': [2, 3]}
-    target = 'target'
-    split_tables = action_rules.get_split_tables(data, target_items_binding, target)
-    np.testing.assert_array_equal(split_tables[2], data[:, [1]])
-    np.testing.assert_array_equal(split_tables[3], data[:, [0, 2]])
 
 
 @pytest.mark.parametrize(
@@ -572,3 +553,133 @@ def test_remap_utility_tables(action_rules):
     }
     assert remapped_intrinsic == expected_intrinsic
     assert remapped_transition == expected_transition
+
+
+def test_build_bit_masks_single_word(action_rules):
+    """
+    Verify that a small binary matrix is packed into a single 64-bit word per attribute.
+    """
+    action_rules.set_array_library(use_gpu=False, df=pd.DataFrame({'dummy': [0]}))
+    data = np.array(
+        [
+            [1, 0, 1],
+            [0, 1, 0],
+        ],
+        dtype=np.uint8,
+    )
+
+    bit_masks = action_rules.build_bit_masks(data)
+
+    assert bit_masks.shape == (2, 1)
+    assert bit_masks.dtype == np.uint64
+    assert bit_masks[0, 0] == np.uint64(0b00000000000000000000000000000101)
+    assert bit_masks[1, 0] == np.uint64(0b00000000000000000000000000000010)
+
+
+def test_build_bit_masks_multiple_words(action_rules):
+    """
+    Verify that packing spans multiple 64-bit words when transactions exceed 64 entries.
+    """
+    action_rules.set_array_library(use_gpu=False, df=pd.DataFrame({'dummy': [0]}))
+    data = np.zeros((2, 130), dtype=np.uint8)
+    # attribute #0 hits several boundary positions
+    data[0, 0] = 1
+    data[0, 63] = 1
+    data[0, 64] = 1
+    data[0, 129] = 1
+    # attribute #1 lights up different offsets
+    data[1, 1] = 1
+    data[1, 62] = 1
+    data[1, 65] = 1
+    data[1, 100] = 1
+    data[1, 128] = 1
+
+    bit_masks = action_rules.build_bit_masks(data)
+
+    assert bit_masks.shape == (2, 3)
+
+    attr0_word0 = (np.uint64(1) << np.uint64(0)) | (np.uint64(1) << np.uint64(63))
+    attr0_word1 = np.uint64(1) << np.uint64(0)
+    attr0_word2 = np.uint64(1) << np.uint64(1)
+    assert bit_masks[0, 0] == attr0_word0
+    assert bit_masks[0, 1] == attr0_word1
+    assert bit_masks[0, 2] == attr0_word2
+
+    attr1_word0 = (np.uint64(1) << np.uint64(1)) | (np.uint64(1) << np.uint64(62))
+    attr1_word1 = (np.uint64(1) << np.uint64(1)) | (np.uint64(1) << np.uint64(36))
+    attr1_word2 = np.uint64(1) << np.uint64(0)
+    assert bit_masks[1, 0] == attr1_word0
+    assert bit_masks[1, 1] == attr1_word1
+    assert bit_masks[1, 2] == attr1_word2
+
+
+def test_fit_uses_bfs_candidate_expansion(action_rules, monkeypatch):
+    """
+    Candidate expansion should follow queue order so earlier siblings are processed first.
+    """
+    visited_prefixes = []
+
+    class DummyRules:
+        def __init__(self, *args, **kwargs):
+            self.action_rules = []
+
+        def prune_classification_rules(self, depth, stop_list):
+            return None
+
+        def generate_action_rules(self):
+            return None
+
+    class DummyCandidateGenerator:
+        def __init__(self, **kwargs):
+            return None
+
+        def generate_candidates(self, **candidate):
+            child_candidate = {
+                key: value
+                for key, value in candidate.items()
+                if key
+                in {
+                    'stable_items_binding',
+                    'flexible_items_binding',
+                    'actionable_attributes',
+                }
+            }
+            prefix = tuple(candidate['ar_prefix'])
+            visited_prefixes.append(prefix)
+            if prefix == tuple():
+                return [
+                    {
+                        **child_candidate,
+                        'ar_prefix': ('a',),
+                        'itemset_prefix': ('a',),
+                    },
+                    {
+                        **child_candidate,
+                        'ar_prefix': ('b',),
+                        'itemset_prefix': ('b',),
+                    },
+                ]
+            if prefix == ('a',):
+                return [
+                    {
+                        **child_candidate,
+                        'ar_prefix': ('a', 'a1'),
+                        'itemset_prefix': ('a', 'a1'),
+                    }
+                ]
+            return []
+
+    monkeypatch.setattr('action_rules.action_rules.CandidateGenerator', DummyCandidateGenerator)
+    monkeypatch.setattr('action_rules.action_rules.Rules', DummyRules)
+
+    df = pd.DataFrame({'stable': ['a', 'b'], 'flexible': ['x', 'y'], 'target': ['yes', 'no']})
+    action_rules.fit(
+        df,
+        stable_attributes=['stable'],
+        flexible_attributes=['flexible'],
+        target='target',
+        target_undesired_state='no',
+        target_desired_state='yes',
+    )
+
+    assert visited_prefixes == [tuple(), ('a',), ('b',), ('a', 'a1')]

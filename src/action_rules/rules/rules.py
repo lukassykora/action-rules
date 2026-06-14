@@ -97,6 +97,7 @@ class Rules:
         self.count_transactions = count_transactions
         self.intrinsic_utility_table = intrinsic_utility_table or {}
         self.transition_utility_table = transition_utility_table or {}
+        self.has_utility_tables = bool(self.intrinsic_utility_table or self.transition_utility_table)
 
     def add_prefix_without_conf(self, prefix: tuple, is_desired: bool):
         """
@@ -118,6 +119,16 @@ class Rules:
             self.desired_prefixes_without_conf.add(prefix)
         else:
             self.undesired_prefixes_without_conf.add(prefix)
+
+    @staticmethod
+    def _add_stop_entry(stop_collection, value: tuple) -> None:
+        """
+        Add a stop entry to either a list or a set.
+        """
+        if hasattr(stop_collection, "add"):
+            stop_collection.add(value)
+        else:
+            stop_collection.append(value)
 
     def add_classification_rules(self, new_ar_prefix, itemset_prefix, undesired_states, desired_states):
         """
@@ -234,7 +245,7 @@ class Rules:
                     if (len_desired == 0 and attribute_prefix not in self.desired_prefixes_without_conf) or (
                         len_undesired == 0 and attribute_prefix not in self.undesired_prefixes_without_conf
                     ):
-                        stop_list.append(attribute_prefix)
+                        self._add_stop_entry(stop_list, attribute_prefix)
                     del_prefixes.append(attribute_prefix)
         for attribute_prefix in del_prefixes:
             del self.classification_rules[attribute_prefix]

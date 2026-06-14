@@ -178,3 +178,9 @@
 * Feature: New CLI options for confidence intervals (`--ci-method`, `--ci-level`, `--ci-threshold`, `--ci-metric`, …).
 * Fix: `df_to_array` no longer creates spurious `<attr>_<item_*>_nan` one-hot columns for missing antecedent values; `NaN` is now preserved through `get_dummies` per the pessimistic null-value semantics of Dardzinska (2013, §2.3.2). Target column behaviour unchanged.
 * Docs: Notebooks for the Telco churn end-to-end tour, rule-level CIs across three datasets (Bank Marketing, Credit Card Default, Employee Attrition), and the inference studies / article figures.
+
+## [2.0.0] - 2026-06-06
+
+
+* Feature: Packed-bitset rewrite of the Action-Apriori mining core. CPU and GPU CUDA path. 
+* Compatibility: Public API preserved so existing 1.x call sites keep working unchanged.
