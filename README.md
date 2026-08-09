@@ -48,9 +48,9 @@ target = 'Survived'
 min_stable_attributes = 2
 min_flexible_attributes = 1  # min 1
 min_undesired_support = 1
-min_undesired_confidence = 0.5  # min 0.5
+min_undesired_confidence = 0.5
 min_desired_support = 1
-min_desired_confidence = 0.5  # min 0.5
+min_desired_confidence = 0.5
 undesired_state = '0'
 desired_state = '1'
 # Action Rules Mining
