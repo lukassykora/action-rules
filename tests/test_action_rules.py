@@ -675,3 +675,48 @@ def test_fit_uses_bfs_candidate_expansion(action_rules, monkeypatch):
     )
 
     assert visited_prefixes == [tuple(), ('a',), ('b',), ('a', 'a1')]
+
+
+def test_mining_below_half_confidence():
+    """
+    Test that confidence thresholds below 0.5 are accepted and honoured.
+
+    The package does not enforce a lower bound on
+    ``min_undesired_confidence`` / ``min_desired_confidence``; mining must
+    therefore also return rules whose side confidences lie below 0.5.
+
+    Asserts
+    -------
+    Asserts that rules are mined with thresholds of 0.3 and that at least
+    one discovered rule has an undesired-side confidence below 0.5.
+    """
+    import json
+
+    df = pd.DataFrame(
+        {
+            'A': ['x'] * 10,
+            'F': ['a'] * 5 + ['b'] * 5,
+            'T': ['u', 'u', 'd', 'd', 'd', 'd', 'd', 'd', 'd', 'u'],
+        }
+    )
+    ar = ActionRules(
+        min_stable_attributes=1,
+        min_flexible_attributes=1,
+        min_undesired_support=1,
+        min_undesired_confidence=0.3,
+        min_desired_support=1,
+        min_desired_confidence=0.3,
+        verbose=False,
+    )
+    ar.fit(
+        data=df,
+        stable_attributes=['A'],
+        flexible_attributes=['F'],
+        target='T',
+        target_undesired_state='u',
+        target_desired_state='d',
+    )
+    exported = json.loads(ar.get_rules().get_export_notation())
+    assert len(exported) > 0
+    undesired_confidences = [float(r['confidence of undesired part']) for r in exported]
+    assert any(c < 0.5 for c in undesired_confidences)
