@@ -184,3 +184,9 @@
 
 * Feature: Packed-bitset rewrite of the Action-Apriori mining core. CPU and GPU CUDA path. 
 * Compatibility: Public API preserved so existing 1.x call sites keep working unchanged.
+
+## [2.0.1] - 2026-08-10
+
+* Docs: Removed the stale `# min 0.5` comments from the README and usage docs — the confidence thresholds have no enforced lower bound.
+* Tests: Added a regression test covering mining with confidence thresholds below 0.5.
+* Examples: The Telco utility tables now price every flexible attribute state (InternetService and PhoneService margins, explicit `No internet service` levels), so cancelling a service line is no longer treated as free; the `telco_tour` notebooks and outputs were regenerated (seeded, reproducible).
