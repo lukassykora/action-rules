@@ -8,7 +8,7 @@ This folder is the executable companion of the Rule Challenge 2026 paper
 Package for Decision Support*: every number and bitmap figure in the paper's
 Telco case study is generated here with `action-rules==2.0.1`
 (bootstrap seed 42). `fig1_churn_rate_panel.pdf` and
-`fig2_bootstrap_hist.pdf` are the paper's Figures 4 and 5.
+`fig2_bootstrap_hist.pdf` are the paper's Figures 3 and 4.
 
 ## Notebooks (run in order)
 
