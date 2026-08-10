@@ -13,11 +13,9 @@ python - <<'PY'
 import pandas as pd
 pd.read_csv("../data/telco.csv", sep=";").to_csv("telco_comma.csv", index=False)
 PY
-
 stable='gender,SeniorCitizen,Partner'
 flexible='PhoneService,InternetService,OnlineSecurity,'
 flexible+='DeviceProtection,TechSupport,StreamingTV'
-
 action-rules --csv_path telco_comma.csv \
   --stable_attributes "$stable" \
   --flexible_attributes "$flexible" \
