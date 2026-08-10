@@ -17,4 +17,4 @@ __all__ = [
 ]
 __author__ = """Lukas Sykora"""
 __email__ = 'lukas.sykora@vse.cz'
-__version__ = '2.0.0'
+__version__ = '2.0.1'
