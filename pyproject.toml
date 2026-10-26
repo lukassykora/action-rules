@@ -1,7 +1,7 @@
 [tool]
 [tool.poetry]
 name = "action-rules"
-version = "2.0.1"
+version = "2.1.0"
 homepage = "https://github.com/lukassykora/action-rules"
 description = "The package for action rules mining using Action-Apriori (Apriori Modified for Action Rules Mining).."
 authors = ["Lukas Sykora <lukas.sykora@vse.cz>"]
@@ -31,7 +31,7 @@ flake8  = { version = "^7.0.0", optional = true}
 flake8-docstrings = { version = "^1.7.0", optional = true }
 mypy = {version = "^1.10.0", optional = true}
 pytest  = { version = "^8.2.1", optional = true}
-pytest-cov  = { version = "^5.0.0", optional = true}
+pytest-cov  = { version = ">=5.0.0,<8.0.0", optional = true}
 scipy = { version = "^1.10", optional = true}
 matplotlib = { version = "^3.7", optional = true}
 tox  = { version = "^4.15.0", optional = true}

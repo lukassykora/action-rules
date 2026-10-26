@@ -643,3 +643,16 @@ class TestDegenerateResampleReporting:
         # miss them entirely.
         assert result.undefined_bootstrap_fraction is not None
         assert result.undefined_bootstrap_fraction > 0.01
+
+    def test_multinomial_resample_mode_matches_rows_distribution(self):
+        """Vectorised 5-cell multinomial resampling agrees closely with row resampling."""
+        data = _make_data(n=400)
+        r_rows = BootstrapEngine(n_bootstrap=500, random_state=42, resample_mode="rows").compute(
+            data, [_make_rule()]
+        )[0]
+        r_mult = BootstrapEngine(n_bootstrap=500, random_state=42, resample_mode="multinomial").compute(
+            data, [_make_rule()]
+        )[0]
+        assert r_mult.uplift_point == pytest.approx(r_rows.uplift_point, abs=0.03)
+        assert r_mult.uplift_ci_lower == pytest.approx(r_rows.uplift_ci_lower, abs=0.05)
+        assert r_mult.uplift_ci_upper == pytest.approx(r_rows.uplift_ci_upper, abs=0.05)

@@ -167,3 +167,24 @@ def test_compute_rule_utility(rules):
     assert abs(result[0] - expected[0]) < tol, f"max_rule_gain: expected {expected[0]}, got {result[0]}"
     assert abs(result[1] - expected[1]) < tol, f"realistic_rule_gain: expected {expected[1]}, got {result[1]}"
     assert abs(result[2] - expected[2]) < tol, f"realistic_rule_gain_dataset: expected {expected[2]}, got {result[2]}"
+
+
+def test_calculate_uplift_zero_confidence_and_zero_transactions(rules):
+    """calculate_uplift returns 0.0 instead of raising ZeroDivisionError when confidence or transactions are 0."""
+    assert rules.calculate_uplift(0, 0.0, 0.8) == 0.0
+    rules.count_transactions = 0
+    assert rules.calculate_uplift(10, 0.5, 0.8) == 0.0
+
+
+def test_generate_action_rules_skips_identical_itemsets_with_prefix(rules):
+    """generate_action_rules skips self-paired identical itemsets when attribute_prefix is non-empty."""
+    rules.add_classification_rules(
+        ('flex_attr',),
+        (0,),
+        [{'item': 1, 'support': 10, 'confidence': 0.4}, {'item': 2, 'support': 12, 'confidence': 0.7}],
+        [{'item': 1, 'support': 15, 'confidence': 0.6}],
+    )
+    rules.generate_action_rules()
+    assert len(rules.action_rules) == 1
+    assert rules.action_rules[0]['undesired']['itemset'] == (0, 2)
+    assert rules.action_rules[0]['desired']['itemset'] == (0, 1)

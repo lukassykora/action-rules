@@ -908,6 +908,11 @@ class ActionRules:
         random_state: Optional[int] = None,
         analytic_type: str = "wald",
         bootstrap_type: str = "percentile",
+        *,
+        prior: Optional[str] = None,
+        simultaneous_m: Optional[int] = None,
+        resample_mode: str = "rows",
+        discovery_fraction: float = 0.5,
     ):
         r"""Compute confidence intervals for all fitted action rules.
 
@@ -999,7 +1004,15 @@ class ActionRules:
             raise ValueError("n_bootstrap must be >= 1.")
         if n_mc < 1:
             raise ValueError("n_mc must be >= 1.")
-        valid_analytic_types = {"wald", "wilson", "newcombe_wilson", "auto"}
+        valid_analytic_types = {
+            "wald",
+            "wald_rd",
+            "wald_random",
+            "wilson",
+            "newcombe_wilson",
+            "clopper_pearson",
+            "auto",
+        }
         if analytic_type not in valid_analytic_types:
             raise ValueError(f"Unknown analytic_type '{analytic_type}'. Choose from {valid_analytic_types}.")
         valid_bootstrap_types = {"percentile", "bca"}
@@ -1012,27 +1025,52 @@ class ActionRules:
         from .inference.base import categorize_rule, extract_rule_masks
 
         masks = extract_rule_masks(self.output)
+        eval_data = data
 
         engine: Any
-        if method == "bootstrap":
+        if method in ("bootstrap", "bca"):
             from .inference.bootstrap import BootstrapEngine
 
-            engine = BootstrapEngine(n_bootstrap, random_state, bootstrap_type=bootstrap_type)
-        elif method in ("analytic", "wald"):
+            eff_btype = "bca" if method == "bca" else bootstrap_type
+            engine = BootstrapEngine(
+                n_bootstrap,
+                random_state,
+                bootstrap_type=eff_btype,
+                resample_mode=resample_mode,
+            )
+        elif method in ("analytic", "wald", "wald_rd", "wald_random", "wilson", "newcombe_wilson", "clopper_pearson", "auto"):
             from .inference.analytic import AnalyticEngine
 
-            engine = AnalyticEngine(analytic_type=analytic_type)
-        elif method == "bayesian":
+            eff_atype = analytic_type if method in ("analytic", "wald") else method
+            engine = AnalyticEngine(analytic_type=eff_atype, simultaneous_m=simultaneous_m)
+        elif method in ("bayesian", "jeffreys"):
             from .inference.bayesian import BayesianEngine
 
-            engine = BayesianEngine(n_mc, random_state=random_state)
+            eff_prior = "jeffreys" if method == "jeffreys" else prior
+            engine = BayesianEngine(n_mc, random_state=random_state, prior=eff_prior)
+        elif method == "honest_split":
+            if not (0.0 < discovery_fraction < 1.0):
+                raise ValueError("discovery_fraction must be strictly between 0 and 1.")
+            import numpy as _np
+
+            from .inference.analytic import AnalyticEngine
+
+            rng_split = _np.random.default_rng(random_state)
+            n_rows = len(data)
+            perm = rng_split.permutation(n_rows)
+            n_disc = int(round(discovery_fraction * n_rows))
+            est_idx = perm[n_disc:]
+            eval_data = data.iloc[est_idx].reset_index(drop=True) if len(est_idx) > 0 else data
+            eff_atype = "newcombe_wilson" if analytic_type == "wald" else analytic_type
+            engine = AnalyticEngine(analytic_type=eff_atype, simultaneous_m=simultaneous_m)
         else:
             raise ValueError(
-                f"Unknown method '{method}'. Supported methods: 'bootstrap', 'analytic', 'wald', 'bayesian'."
+                f"Unknown method '{method}'. Supported methods: 'bootstrap', 'bca', 'analytic', 'wald', "
+                f"'wald_rd', 'newcombe_wilson', 'clopper_pearson', 'auto', 'bayesian', 'jeffreys', 'honest_split'."
             )
 
         results = engine.compute(
-            data=data,
+            data=eval_data,
             rules=masks,
             confidence_level=confidence_level,
             intrinsic_utility_table=self._original_intrinsic_utility_table or None,

@@ -1150,3 +1150,23 @@ class TestCLI:
         finally:
             os.unlink(csv_path)
             os.unlink(json_path)
+
+
+class TestV210Extensions:
+    """Integration tests for v2.1.0 confidence_intervals methods and options."""
+
+    def test_wald_rd_and_clopper_pearson_and_jeffreys_and_honest_split(self, fitted_ar):
+        """Verify new method aliases ('wald_rd', 'clopper_pearson', 'jeffreys', 'honest_split') run cleanly."""
+        ar, data = fitted_ar
+        res_rd = ar.confidence_intervals(data, method="wald_rd")
+        assert len(res_rd) == len(ar.output.action_rules)
+        res_cp = ar.confidence_intervals(data, method="clopper_pearson", simultaneous_m=len(res_rd))
+        assert len(res_cp) == len(ar.output.action_rules)
+        res_j = ar.confidence_intervals(data, method="jeffreys", n_mc=200, random_state=42)
+        assert len(res_j) == len(ar.output.action_rules)
+        res_hs = ar.confidence_intervals(data, method="honest_split", discovery_fraction=0.5, random_state=42)
+        assert len(res_hs) == len(ar.output.action_rules)
+        res_mult = ar.confidence_intervals(
+            data, method="bootstrap", n_bootstrap=50, random_state=42, resample_mode="multinomial"
+        )
+        assert len(res_mult) == len(ar.output.action_rules)

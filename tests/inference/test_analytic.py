@@ -821,3 +821,39 @@ class TestAutoMode:
 
         assert auto.uplift_point == pytest.approx(wald.uplift_point, rel=1e-12)
         assert auto.uplift_se == pytest.approx(wald.uplift_se, rel=1e-12)
+
+
+class TestRandomDesignAndClopperPearson:
+    """Tests for v2.1.0 random-design Wald ('wald_rd'), 'clopper_pearson', and 'simultaneous_m'."""
+
+    def test_wald_rd_wider_than_fixed_wald(self):
+        """Random-design Wald propagates prevalence uncertainty and is at least as wide as fixed Wald."""
+        data = _make_data(n=200)
+        extra = pd.DataFrame({'age': ['0'] * 10, 'class': ['0'] * 10, 'target': ['1'] * 10})
+        mixed = pd.concat([data, extra], ignore_index=True)
+
+        w_fixed = AnalyticEngine(analytic_type="wald").compute(mixed, [_make_rule()])[0]
+        w_rd = AnalyticEngine(analytic_type="wald_rd").compute(mixed, [_make_rule()])[0]
+        assert w_rd.uplift_point == pytest.approx(w_fixed.uplift_point, rel=1e-12)
+        assert w_rd.uplift_se >= w_fixed.uplift_se
+
+    def test_clopper_pearson_conservative(self):
+        """Clopper-Pearson combined via Newcombe produces valid conservative bounds."""
+        data = _make_data(n=100)
+        extra = pd.DataFrame({'age': ['0'] * 5, 'class': ['0'] * 5, 'target': ['1'] * 5})
+        mixed = pd.concat([data, extra], ignore_index=True)
+
+        cp = AnalyticEngine(analytic_type="clopper_pearson").compute(mixed, [_make_rule()])[0]
+        nw = AnalyticEngine(analytic_type="newcombe_wilson").compute(mixed, [_make_rule()])[0]
+        assert cp.uplift_point == pytest.approx(nw.uplift_point, rel=1e-12)
+        assert (cp.uplift_ci_upper - cp.uplift_ci_lower) >= (nw.uplift_ci_upper - nw.uplift_ci_lower)
+
+    def test_simultaneous_m_widens_interval(self):
+        """Bonferroni multiplicity simultaneous_m > 1 widens the confidence interval."""
+        data = _make_data(n=200)
+        extra = pd.DataFrame({'age': ['0'] * 10, 'class': ['0'] * 10, 'target': ['1'] * 10})
+        mixed = pd.concat([data, extra], ignore_index=True)
+
+        r1 = AnalyticEngine(analytic_type="newcombe_wilson", simultaneous_m=1).compute(mixed, [_make_rule()])[0]
+        r10 = AnalyticEngine(analytic_type="newcombe_wilson", simultaneous_m=10).compute(mixed, [_make_rule()])[0]
+        assert (r10.uplift_ci_upper - r10.uplift_ci_lower) > (r1.uplift_ci_upper - r1.uplift_ci_lower)
