@@ -368,36 +368,13 @@ class TestZeroSupport:
         result = BayesianEngine(n_mc=200, random_state=0).compute(data, [rule])[0]
         assert isinstance(result, ConfidenceIntervalResult)
 
-    def test_uplift_is_zero_when_n_u_ante_zero(self):
-        """When n_u_ante = 0 the uplift samples collapse to 0 (zero scale factor)."""
-        data = _make_data()
-        rule = self._make_zero_support_rule()
-        result = BayesianEngine(n_mc=200, random_state=0).compute(data, [rule])[0]
-        # uplift = d * (n_u_ante / n_total); n_u_ante = 0 so uplift = 0 for all draws.
-        assert result.uplift_point == pytest.approx(0.0, abs=1e-12)
-
-    def test_samples_still_have_correct_length(self):
-        """samples_uplift should still have n_mc elements even for zero-support rule."""
-        data = _make_data()
-        rule = self._make_zero_support_rule()
-        n_mc = 150
-        result = BayesianEngine(n_mc=n_mc, random_state=0).compute(data, [rule])[0]
-        assert result.samples_uplift.shape == (n_mc,)
-
-    def test_wide_interval_reflects_uncertainty(self):
-        """Prior-only posterior (flat Beta(1,1)) produces a wide interval.
-
-        We check that samples span [0, 1] roughly -- the mean p_d and p_u
-        draws should each be near 0.5.
-        """
-        data = _make_data()
-        rule = self._make_zero_support_rule()
-        # With flat prior Beta(1,1) posterior draws cover [0,1] uniformly.
-        engine = BayesianEngine(n_mc=5000, prior_alpha=1.0, prior_beta=1.0, random_state=42)
-        result = engine.compute(data, [rule])[0]
-        # uplift = 0 always (scale = 0), so all uplift samples are 0.
-        assert result.uplift_ci_lower == pytest.approx(0.0, abs=1e-12)
-        assert result.uplift_ci_upper == pytest.approx(0.0, abs=1e-12)
+    def test_zero_group_is_unsupported(self):
+        """Missing empirical support cannot produce an accepted zero interval."""
+        result = BayesianEngine(n_mc=200, random_state=0).compute(_make_data(), [self._make_zero_support_rule()])[0]
+        assert np.isnan(result.uplift_point)
+        assert np.isnan(result.uplift_ci_lower)
+        assert result.category.value == 'unsupported'
+        assert result.samples_uplift is None
 
 
 # ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@ import pandas as pd
 from .base import (
     ConfidenceIntervalResult,
     InferenceEngine,
+    RuleCategory,
     RuleMasks,
     bonferroni_confidence_level,
     categorize_rule,
@@ -115,8 +116,9 @@ class BootstrapEngine(InferenceEngine):
     -----
     Resamples that produce zero antecedent support for either the undesired
     or the desired rule are recorded as ``NaN`` and excluded from all
-    summary statistics.  This is conservative: sparse rules will exhibit
-    wider intervals because many resamples are discarded.
+    summary statistics. Dropping draws does not imply conservativeness.
+    More than 1% undefined draws makes the interval unsupported. BCa also
+    requires every leave-one-out estimate to be defined.
 
     For the percentile bootstrap, the point estimate (``uplift_point``) is
     the mean of the non-NaN bootstrap distribution, not the value computed on
@@ -155,6 +157,8 @@ class BootstrapEngine(InferenceEngine):
         if resample_mode not in valid_modes:
             raise ValueError(f"Unknown resample_mode '{resample_mode}'. Choose from {valid_modes}.")
         validate_simultaneous_m(simultaneous_m)
+        if not isinstance(n_bootstrap, int) or isinstance(n_bootstrap, bool) or n_bootstrap < 2:
+            raise ValueError("n_bootstrap must be an integer >= 2.")
         self.n_bootstrap = n_bootstrap
         self.random_state = random_state
         self.bootstrap_type = bootstrap_type
@@ -191,8 +195,9 @@ class BootstrapEngine(InferenceEngine):
         conf_d_arr = draws[valid_mask, 2] / nd_arr[valid_mask]
         uplift_samples[valid_mask] = (conf_d_arr + conf_u_arr - 1.0) * (nu_arr[valid_mask] / float(n))
         if gain_samples is not None and gain_args is not None:
-            for idx_b, conf_u, conf_d in zip(np.flatnonzero(valid_mask), conf_u_arr, conf_d_arr):
-                gain_samples[idx_b] = compute_realistic_gain(rule, float(conf_u), float(conf_d), *gain_args)
+            a = compute_realistic_gain(rule, 0.0, 1.0, *gain_args)
+            b = compute_realistic_gain(rule, 1.0, 1.0, *gain_args) - a
+            gain_samples[valid_mask] = a + b * (conf_u_arr + conf_d_arr - 1.0)
         return int((~valid_mask).sum())
 
     def _resample_rows(
@@ -286,7 +291,9 @@ class BootstrapEngine(InferenceEngine):
 
         # Bias correction z0: proportion of bootstrap replicates strictly
         # below the full-data estimate, mapped through the normal quantile.
-        proportion_below = np.mean(valid < original_estimate)
+        if not np.all(np.isfinite(jackknife_estimates)) or not np.isfinite(original_estimate):
+            return point, float('nan'), float('nan'), se
+        proportion_below = np.mean(valid < original_estimate) + 0.5 * np.mean(valid == original_estimate)
         proportion_below = np.clip(proportion_below, 1e-10, 1.0 - 1e-10)
         z0 = norm.ppf(proportion_below)
 
@@ -313,6 +320,8 @@ class BootstrapEngine(InferenceEngine):
         pct_lo = np.clip(_adj(z_lower) * 100.0, 0.0, 100.0)
         pct_hi = np.clip(_adj(z_upper) * 100.0, 0.0, 100.0)
 
+        if pct_lo > pct_hi:
+            return point, float('nan'), float('nan'), se
         lower = float(np.percentile(valid, pct_lo))
         upper = float(np.percentile(valid, pct_hi))
 
@@ -356,21 +365,12 @@ class BootstrapEngine(InferenceEngine):
         full_d_ante = int(d_ante.sum())
         full_d_match = int(d_match.sum())
 
-        jack = np.empty(n)
-        for i in range(n):
-            nu = full_u_ante - int(u_ante[i])
-            num = full_u_match - int(u_match[i])
-            nd = full_d_ante - int(d_ante[i])
-            ndm = full_d_match - int(d_match[i])
-            nt = n - 1
-            if nu == 0 or nd == 0 or nt == 0:
-                jack[i] = 0.0
-            else:
-                conf_u = num / nu
-                conf_d = ndm / nd
-                # Uplift measure (Ras et al., 2009): d * sup_u / N
-                d = conf_d + conf_u - 1.0
-                jack[i] = d * nu / nt
+        nu = full_u_ante - u_ante.astype(int)
+        nd = full_d_ante - d_ante.astype(int)
+        valid = (nu > 0) & (nd > 0) & (n > 1)
+        jack = np.full(n, np.nan)
+        delta = (full_u_match - u_match[valid]) / nu[valid] + (full_d_match - d_match[valid]) / nd[valid] - 1.0
+        jack[valid] = delta * nu[valid] / (n - 1)
         return jack
 
     @staticmethod
@@ -422,26 +422,14 @@ class BootstrapEngine(InferenceEngine):
         full_d_ante = int(d_ante.sum())
         full_d_match = int(d_match.sum())
 
-        jack = np.empty(n)
-        for i in range(n):
-            nu = full_u_ante - int(u_ante[i])
-            num = full_u_match - int(u_match[i])
-            nd = full_d_ante - int(d_ante[i])
-            ndm = full_d_match - int(d_match[i])
-            nt = n - 1
-            if nu == 0 or nd == 0 or nt == 0:
-                jack[i] = 0.0
-            else:
-                conf_u = num / nu
-                conf_d = ndm / nd
-                jack[i] = compute_realistic_gain(
-                    rule,
-                    conf_u,
-                    conf_d,
-                    intrinsic_utility_table,
-                    transition_utility_table,
-                    column_values,
-                )
+        nu = full_u_ante - u_ante.astype(int)
+        nd = full_d_ante - d_ante.astype(int)
+        valid = (nu > 0) & (nd > 0) & (n > 1)
+        jack = np.full(n, np.nan)
+        delta = (full_u_match - u_match[valid]) / nu[valid] + (full_d_match - d_match[valid]) / nd[valid] - 1.0
+        a = compute_realistic_gain(rule, 0.0, 1.0, intrinsic_utility_table, transition_utility_table, column_values)
+        b = compute_realistic_gain(rule, 1.0, 1.0, intrinsic_utility_table, transition_utility_table, column_values) - a
+        jack[valid] = a + b * delta
         return jack
 
     # ------------------------------------------------------------------
@@ -654,7 +642,7 @@ class BootstrapEngine(InferenceEngine):
             # Categorise the rule based on the uplift CI vs. zero threshold.
             # Guard against NaN bounds produced when no valid resamples exist.
             if np.isnan(uplift_lower) or np.isnan(uplift_upper):
-                category = None
+                category = RuleCategory.UNSUPPORTED
             else:
                 category = categorize_rule(uplift_lower, uplift_upper, threshold=0.0)
 
@@ -663,11 +651,17 @@ class BootstrapEngine(InferenceEngine):
                 warnings.warn(
                     f"Rule {rule.rule_index}: {undefined_fraction:.1%} of bootstrap "
                     f"resamples were degenerate (n_u=0 or n_d=0) and were dropped. "
-                    f"Percentile interval is conditioned on non-degeneracy. "
+                    f"Interval is UNSUPPORTED because the undefined fraction exceeds 1%. "
                     f"Consider raising rule support or using analytic_type='auto'.",
                     UserWarning,
                     stacklevel=3,
                 )
+
+            if undefined_fraction > DEGENERATE_RESAMPLE_TOLERANCE:
+                uplift_lower = uplift_upper = uplift_se = float('nan')
+                if compute_gain:
+                    gain_lower = gain_upper = gain_se = float('nan')
+                category = RuleCategory.UNSUPPORTED
 
             results.append(
                 ConfidenceIntervalResult(

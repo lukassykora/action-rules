@@ -9,12 +9,7 @@ Focuses on the small, pure helpers that have no engine of their own:
 import numpy as np
 import pandas as pd
 
-from action_rules.inference.base import (
-    ConfidenceIntervalResult,
-    RuleCategory,
-    categorize_rule,
-    results_to_dataframe,
-)
+from action_rules.inference.base import ConfidenceIntervalResult, RuleCategory, categorize_rule, results_to_dataframe
 
 
 def _make_result(

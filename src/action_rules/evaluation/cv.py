@@ -20,11 +20,12 @@ Across folds the result reports both:
   CI (the latter is unreliable for K-fold CV — see Bates, Hastie &
   Tibshirani, "Cross-Validation: What does it estimate and how well does
   it do it?", arXiv:2104.00673, 2021).
-- **bootstrap CI**: a *cluster bootstrap* by fold (the default) — for each
+- **descriptive resampling interval**: rule records within fixed folds (legacy name ``cluster_fold``) — for each
   bootstrap replicate, rule records are resampled with replacement within
   each fold, the targeting metric is computed per fold, then averaged
-  across folds.  The resulting interval estimates the same fold-mean
-  quantity as the ``mean`` column.  A legacy ``oof_pool`` design (resample
+  across folds.  The resulting descriptive interval centers on the fold-mean
+  quantity. It does not preserve overlapping-rule or training-fold dependence
+  and is not a calibrated confidence interval for generalization performance.  A legacy ``oof_pool`` design (resample
   within fold then concatenate into one pool before computing the metric)
   is also available; it estimates a *pool-level* statistic that differs
   from the fold mean by roughly a factor of K, so ``mean`` and ``[CI]``
@@ -246,10 +247,12 @@ def _score_rule_on_data(
             column_values=column_values,
         )
 
-    # "Support" on the test fold is the union antecedent count — i.e. how
-    # many rows match either side.  The maximum of the two is a useful
-    # weight for coverage-weighted Qini.
-    support = max(n_u_ante, n_d_ante)
+    # Gain is per undesired-antecedent record, so its aggregate weight is n_u.
+    support = n_u_ante
+    if n_u_ante == 0 or n_d_ante == 0:
+        uplift = float('nan')
+        if gain is not None:
+            gain = float('nan')
     return {
         'support': support,
         'support_undesired': n_u_ante,
@@ -287,9 +290,9 @@ def _metric_value(
     if name == 'uplift_at_k':
         return M.uplift_at_k(scores, outcomes, k_fraction=k_fraction)
     if name == 'qini':
-        return M.qini_coefficient(scores, outcomes, supports=supports)
+        return M.qini_coefficient(scores, outcomes)
     if name == 'auuc':
-        return M.auuc(scores, outcomes, supports=supports)
+        return M.auuc(scores, outcomes)
     if name == 'profit_at_k':
         return M.incremental_profit_at_k(scores, outcomes, supports=supports, k_fraction=k_fraction)
     raise ValueError(f"Unknown metric '{name}'.")
@@ -389,9 +392,7 @@ class CrossValidator:
         if n_bootstrap_oof < 0:
             raise ValueError(f"n_bootstrap_oof must be >= 0; got {n_bootstrap_oof}.")
         if bootstrap_design not in ('cluster_fold', 'oof_pool'):
-            raise ValueError(
-                f"bootstrap_design must be 'cluster_fold' or 'oof_pool'; got {bootstrap_design!r}."
-            )
+            raise ValueError(f"bootstrap_design must be 'cluster_fold' or 'oof_pool'; got {bootstrap_design!r}.")
         unknown_s = set(strategies) - set(STRATEGIES)
         if unknown_s:
             raise ValueError(f"Unknown strategies: {sorted(unknown_s)}. Supported: {STRATEGIES}.")
@@ -537,7 +538,7 @@ class CrossValidator:
             # to point estimates for this fold.
             warnings.warn(
                 f"CrossValidator: fold {fold_idx} CI computation failed "
-                f"({type(exc).__name__}: {exc}); falling back to point estimates.",
+                f"({type(exc).__name__}: {exc}); interval-based rankings will be unavailable.",
                 RuntimeWarning,
                 stacklevel=2,
             )
@@ -564,9 +565,9 @@ class CrossValidator:
                 'support_train': train_score['support'],
                 'support_test': test_score['support'],
                 'train_uplift': train_score['uplift'],
-                'train_uplift_lower': ci.uplift_ci_lower if ci is not None else train_score['uplift'],
-                'train_uplift_upper': ci.uplift_ci_upper if ci is not None else train_score['uplift'],
-                'train_uplift_se': ci.uplift_se if ci is not None else 0.0,
+                'train_uplift_lower': ci.uplift_ci_lower if ci is not None else float('nan'),
+                'train_uplift_upper': ci.uplift_ci_upper if ci is not None else float('nan'),
+                'train_uplift_se': ci.uplift_se if ci is not None else float('nan'),
                 'test_uplift': test_score['uplift'],
             }
             if self.intrinsic_utility_table or self.transition_utility_table:
@@ -636,7 +637,7 @@ class CrossValidator:
                         }
                     )
                 if has_gain:
-                    test_gain_raw = fold_df['test_gain'].fillna(0.0).to_numpy()[valid_mask].astype(float)
+                    test_gain_raw = fold_df['test_gain'].to_numpy()[valid_mask].astype(float)
                     for metric in self.metrics:
                         rows.append(
                             {
@@ -704,7 +705,7 @@ class CrossValidator:
                 'records': fold_df.to_dict(orient='records'),
                 'test_uplift': fold_df['test_uplift'].to_numpy(),
                 'support_test': fold_df['support_test'].to_numpy().astype(float),
-                'test_gain': fold_df['test_gain'].fillna(0.0).to_numpy().astype(float) if has_gain else None,
+                'test_gain': fold_df['test_gain'].to_numpy().astype(float) if has_gain else None,
             }
 
         samples: dict = {}
@@ -737,17 +738,15 @@ class CrossValidator:
     def _fill_cluster_bootstrap_row(
         self, samples: dict, per_fold: dict, folds: list, rng, has_gain: bool, targets: tuple, b: int
     ) -> None:
-        """Cluster bootstrap by fold: per-fold metric, then mean across folds.
+        """Descriptive within-fold rule resampling, then mean across fixed folds.
 
         Resamples rule records within each fold independently, computes the
         targeting metric on that fold's resample, and averages across folds.
-        The resulting bootstrap distribution estimates the same fold-mean
-        quantity as ``CrossValidationResult.strategy_summary['mean']``.
+        This does not resample folds or people and does not preserve rule
+        dependence. It must not be interpreted as a calibrated CV interval.
         """
         per_fold_values_uplift: dict = {(s, m): [] for s in self.strategies for m in self.metrics}
-        per_fold_values_gain: dict = (
-            {(s, m): [] for s in self.strategies for m in self.metrics} if has_gain else {}
-        )
+        per_fold_values_gain: dict = {(s, m): [] for s in self.strategies for m in self.metrics} if has_gain else {}
 
         for fold_idx in folds:
             info = per_fold[fold_idx]
@@ -759,14 +758,10 @@ class CrossValidator:
             rec_resample = [records[i] for i in resample_idx]
             uplift_all = info['test_uplift'][resample_idx]
             support_all = info['support_test'][resample_idx]
-            gain_all = (
-                info['test_gain'][resample_idx] if (has_gain and info['test_gain'] is not None) else None
-            )
+            gain_all = info['test_gain'][resample_idx] if (has_gain and info['test_gain'] is not None) else None
 
             for strategy in self.strategies:
-                scores = np.array(
-                    [_strategy_score(r, strategy, self.risk_lambda) for r in rec_resample]
-                )
+                scores = np.array([_strategy_score(r, strategy, self.risk_lambda) for r in rec_resample])
                 valid = np.isfinite(scores)
                 if not valid.any():
                     for metric in self.metrics:

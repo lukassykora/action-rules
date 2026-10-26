@@ -211,3 +211,11 @@
 * Fix: The multinomial bootstrap falls back to row resampling for rules whose antecedents overlap, where the 5-cell model does not apply.
 * Docs: Documented all v2.1 methods and options in the `confidence_intervals()` docstring, README and usage docs; the CLI gains `--prior`, `--simultaneous_m`, `--resample_mode`, `--discovery_fraction` and the new `--ci_method` / `--analytic_type` values.
 * CI: Replaced the removed `pymdownx.slugs.uslugify` in `mkdocs.yml`, capped `pymdown-extensions < 12` in the `doc` extra (version 12 breaks `mkdocstrings`), the deprecated `::set-output` and `skip_existing` in the release workflows, and split `BootstrapEngine.compute` to satisfy the flake8 complexity limit.
+
+## [2.1.2] - 2026-10-26
+
+* Feature: Added public count-level inference module `action_rules.inference.counts` (`infer_counts`, `decide_intervals`) for vectorised Monte Carlo calibration and count-table interval evaluation across all CI engines (`wald`, `newcombe_wilson`, `clopper_pearson`, `wald_rd`, `bayesian`, `jeffreys`, `bootstrap`, `bca`).
+* Fix: Empty antecedents (`n_u_ante == 0` or `n_d_ante == 0`) now consistently produce `(NaN, NaN)` bounds and `RuleCategory.UNSUPPORTED` across all CI engines (including Bayesian, Jeffreys, Newcombe-Wilson, Clopper-Pearson, and bootstrap).
+* Fix: `clopper_pearson` now combines individual exact Clopper-Pearson intervals via the rectangular union bound ($\alpha/2$ per arm) rather than Newcombe's square-and-add approximation, guaranteeing finite-sample conditional coverage when antecedents are non-overlapping.
+* Fix: `BootstrapEngine` (`method='bca'`) uses mid-rank `z0` adjustment for tied replicates and analytical five-cell multinomial leave-one-out jackknife values for disjoint antecedents, falling back to percentile intervals when acceleration is degenerate.
+* Fix: `cross_validate()` weights rule gains by test-fold source-antecedent prevalence (`n_u_ante / n_test`) instead of desired-class intersection support (`n_d_both / n_test`), exposes both `qini_coefficient` (gain-weighted area above diagonal) and `qini_Curve_Area` (rule-counted area above diagonal), and enforces explicit estimation-set scaling in `honest_split`.

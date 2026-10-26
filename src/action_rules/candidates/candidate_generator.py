@@ -1,4 +1,5 @@
 """Class CandidateGenerator."""
+
 import itertools
 from typing import TYPE_CHECKING, Iterable, Optional, Union
 
@@ -67,10 +68,10 @@ class CandidateGenerator:
     # GPU batches are sized to fit free device memory. A candidate "context" is two
     # packed masks of `num_words` uint64 words; each worklist item costs ~32 bytes of
     # kernel I/O (2x uint64 supports + int32/int64 indices, padded).
-    _gpu_kernel_min_work = 512        # min (items x words) worth a kernel launch
-    _gpu_bytes_per_word = 8           # uint64
+    _gpu_kernel_min_work = 512  # min (items x words) worth a kernel launch
+    _gpu_bytes_per_word = 8  # uint64
     _gpu_support_bytes_per_item = 32
-    _gpu_free_mem_fraction = 0.45     # share of currently-free VRAM one batch may use
+    _gpu_free_mem_fraction = 0.45  # share of currently-free VRAM one batch may use
 
     def __init__(
         self,
@@ -249,15 +250,11 @@ class CandidateGenerator:
                 continue
             batch_contexts.append(context)
             if len(batch_contexts) >= context_batch_size:
-                new_branches_all.extend(
-                    self._flush_batch_contexts(batch_contexts, stop_list, stop_list_itemset)
-                )
+                new_branches_all.extend(self._flush_batch_contexts(batch_contexts, stop_list, stop_list_itemset))
                 batch_contexts = []
 
         if batch_contexts:
-            new_branches_all.extend(
-                self._flush_batch_contexts(batch_contexts, stop_list, stop_list_itemset)
-            )
+            new_branches_all.extend(self._flush_batch_contexts(batch_contexts, stop_list, stop_list_itemset))
 
         return new_branches_all
 
@@ -375,15 +372,11 @@ class CandidateGenerator:
 
         new_branches_all = []
         for context in batch_contexts:
-            new_branches = self._expand_stable_slices(
-                context, undesired_supports_all, desired_supports_all, stop_list
-            )
+            new_branches = self._expand_stable_slices(context, undesired_supports_all, desired_supports_all, stop_list)
             new_branches += self._expand_flex_slices(
                 context, undesired_supports_all, desired_supports_all, stop_list, stop_list_itemset
             )
-            self.update_new_branches(
-                new_branches, context["stable_candidates"], context["flexible_candidates"]
-            )
+            self.update_new_branches(new_branches, context["stable_candidates"], context["flexible_candidates"])
             new_branches_all.extend(new_branches)
 
         return new_branches_all
@@ -607,11 +600,7 @@ class CandidateGenerator:
         # Fast path: extend parent masks by the last item only (one AND per side).
         # Parent masks are passed as references on child candidates, so the BFS pays
         # O(1) launches per prefix extension instead of O(len(prefix)).
-        if (
-            parent_undesired_mask is not None
-            and parent_desired_mask is not None
-            and itemset_prefix
-        ):
+        if parent_undesired_mask is not None and parent_desired_mask is not None and itemset_prefix:
             last_item_row = self.bit_masks[itemset_prefix[-1]]
             return (
                 parent_undesired_mask & last_item_row,
@@ -672,8 +661,7 @@ class CandidateGenerator:
             if flexible_key_count < 0:
                 flexible_key_count = 0
         reduced_stable_items_binding = {
-            key: stable_items_binding[key]
-            for key in itertools.islice(stable_items_binding.keys(), stable_key_count)
+            key: stable_items_binding[key] for key in itertools.islice(stable_items_binding.keys(), stable_key_count)
         }
         reduced_flexible_items_binding = {
             key: flexible_items_binding[key]
@@ -779,9 +767,7 @@ class CandidateGenerator:
         """
         return self._bitset_support(mask_bitset, item)
 
-    def _bitset_support(
-        self, mask_bitset: Union['numpy.ndarray', 'cupy.ndarray'], item: int
-    ) -> int:
+    def _bitset_support(self, mask_bitset: Union['numpy.ndarray', 'cupy.ndarray'], item: int) -> int:
         """Compute support using packed bit masks by intersecting with the given mask."""
         attribute_mask = self.bit_masks[item]  # type: ignore[index]
         intersection = attribute_mask & mask_bitset
@@ -814,9 +800,7 @@ class CandidateGenerator:
                 return None
         return slice(first, last + 1)
 
-    def _bitset_support_batch(
-        self, mask_bitset: Union['numpy.ndarray', 'cupy.ndarray'], items: list
-    ) -> list[int]:
+    def _bitset_support_batch(self, mask_bitset: Union['numpy.ndarray', 'cupy.ndarray'], items: list) -> list[int]:
         """Compute support for multiple items in one packed-mask pass."""
         if self.bit_masks is None or not items:
             return []
@@ -924,9 +908,7 @@ class CandidateGenerator:
         """
 
         try:
-            cls._gpu_support_kernel_multi = cp.RawKernel(
-                kernel_code, "bitset_support_kernel_multi"
-            )
+            cls._gpu_support_kernel_multi = cp.RawKernel(kernel_code, "bitset_support_kernel_multi")
         except Exception:
             cls._gpu_support_kernel_multi = None
         return cls._gpu_support_kernel_multi
@@ -983,9 +965,7 @@ class CandidateGenerator:
                 context_bytes = 2 * num_words * int(branch_masks_a.shape[0]) * self._gpu_bytes_per_word
                 available = budget_bytes - context_bytes
                 chunk_items = (
-                    max(1, min(total_items, available // self._gpu_support_bytes_per_item))
-                    if available > 0
-                    else 1
+                    max(1, min(total_items, available // self._gpu_support_bytes_per_item)) if available > 0 else 1
                 )
 
             supports_host_a = np.empty(total_items, dtype=np.int64)
@@ -993,9 +973,7 @@ class CandidateGenerator:
             for start in range(0, total_items, chunk_items):
                 stop = min(total_items, start + chunk_items)
                 chunk_len = stop - start
-                candidate_indices = cp.asarray(
-                    work_candidate_indices[start:stop], dtype=cp.int32
-                )
+                candidate_indices = cp.asarray(work_candidate_indices[start:stop], dtype=cp.int32)
                 item_indices = cp.asarray(work_item_indices[start:stop], dtype=cp.int64)
                 supports_a = cp.zeros(chunk_len, dtype=cp.uint64)
                 supports_b = cp.zeros(chunk_len, dtype=cp.uint64)

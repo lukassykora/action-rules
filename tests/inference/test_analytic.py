@@ -301,11 +301,11 @@ class TestZeroSupportEdgeCase:
         assert math.isnan(result.uplift_ci_upper)
         assert math.isnan(result.uplift_se)
 
-    def test_zero_support_category_is_none(self):
+    def test_zero_support_category_is_unsupported(self):
         """Category cannot be determined when support is zero."""
         data = _make_data()
         result = AnalyticEngine().compute(data, [self._zero_rule()])[0]
-        assert result.category is None
+        assert result.category.value == 'unsupported'
 
     def test_zero_support_with_gain_requested_returns_nan(self):
         """Gain fields are NaN (not None) when support is zero but gain is requested."""
@@ -702,9 +702,7 @@ class TestWilsonScoreInterval:
             U_delta = 0.5 + sqrt(2 * 0.1343^2) = 0.5 + 0.1899 = 0.6899
         """
         p_hat, l, u = AnalyticEngine._wilson_bounds(15, 20, 1.96)
-        delta_hat, lo, hi = AnalyticEngine._newcombe_delta_interval(
-            p_hat, l, u, p_hat, l, u
-        )
+        delta_hat, lo, hi = AnalyticEngine._newcombe_delta_interval(p_hat, l, u, p_hat, l, u)
         assert delta_hat == pytest.approx(0.5, rel=1e-9)
         assert lo == pytest.approx(0.5 - math.sqrt(2) * (p_hat - l), rel=1e-9)
         assert hi == pytest.approx(0.5 + math.sqrt(2) * (u - p_hat), rel=1e-9)
@@ -741,13 +739,9 @@ class TestWilsonScoreInterval:
         )[0]
 
         # Gain point estimates match.
-        assert wald.realistic_rule_gain_point == pytest.approx(
-            wilson.realistic_rule_gain_point, rel=1e-9
-        )
+        assert wald.realistic_rule_gain_point == pytest.approx(wilson.realistic_rule_gain_point, rel=1e-9)
         # But the bounds differ (small n).
-        assert wald.realistic_rule_gain_ci_lower != pytest.approx(
-            wilson.realistic_rule_gain_ci_lower, abs=1e-6
-        )
+        assert wald.realistic_rule_gain_ci_lower != pytest.approx(wilson.realistic_rule_gain_ci_lower, abs=1e-6)
 
     def test_gain_endpoints_ordered_under_negative_target_gain(self):
         """When Δu_target < 0 the gain interval lower bound must still be <= upper."""

@@ -34,6 +34,7 @@ import pandas as pd
 from .base import (
     ConfidenceIntervalResult,
     InferenceEngine,
+    RuleCategory,
     bonferroni_confidence_level,
     categorize_rule,
     compute_group_counts,
@@ -75,8 +76,8 @@ class AnalyticEngine(InferenceEngine):
         L_{\\delta} = \\hat\\delta - \\sqrt{(p_d - L_d)^2 + (p_u - L_u)^2}, \\\\
         U_{\\delta} = \\hat\\delta + \\sqrt{(U_d - p_d)^2 + (U_u - p_u)^2}.
 
-    This interval is generally asymmetric and is correct for the sum of two
-    independent proportions even when sample sizes are small.
+    This interval is generally asymmetric. It is an approximate interval for
+    independent proportions; finite-sample coverage is not guaranteed.
 
     For both branches the :math:`\\delta` interval is linearly transformed:
 
@@ -113,12 +114,12 @@ class AnalyticEngine(InferenceEngine):
                 ``'wilson'`` is retained as a backward-compatible alias and
                 resolves to the same Newcombe-Wilson construction.
             ``'clopper_pearson'``
-                Exact Clopper-Pearson single-proportion intervals combined via
-                Newcombe's square-and-add root.
+                Conservative rectangular contrast from Clopper-Pearson component
+                intervals, each at failure probability alpha/2 (union bound).
             ``'auto'``
                 Selects the Newcombe-Wilson branch when either side has
                 ``n < 40`` or ``p < 0.05`` / ``p > 0.95``; falls back to
-                Wald otherwise (Agresti & Coull, 1998).
+                Wald otherwise. These numerical cutoffs are engineering heuristics.
         simultaneous_m : int, optional
             When provided (``>= 1``), applies a Bonferroni simultaneous
             multiplicity correction over *simultaneous_m* candidate rules by
@@ -347,7 +348,7 @@ class AnalyticEngine(InferenceEngine):
                         realistic_rule_gain_se=gain_se,
                         support=support,
                         confidence=confidence,
-                        category=None,
+                        category=RuleCategory.UNSUPPORTED,
                         samples_uplift=None,
                         samples_gain=None,
                     )
@@ -370,9 +371,11 @@ class AnalyticEngine(InferenceEngine):
             var_delta = var_p_u + var_p_d
 
             if self.analytic_type == "clopper_pearson":
-                _, l_u, u_u = self._clopper_pearson_bounds(n_u_match, n_u_ante, alpha)
-                _, l_d, u_d = self._clopper_pearson_bounds(n_d_match, n_d_ante, alpha)
-                _, delta_lower, delta_upper = self._newcombe_delta_interval(p_u, l_u, u_u, p_d, l_d, u_d)
+                # Each component has failure probability alpha/2. The union bound
+                # gives at least 1-alpha coverage for this rectangular contrast.
+                _, l_u, u_u = self._clopper_pearson_bounds(n_u_match, n_u_ante, alpha / 2.0)
+                _, l_d, u_d = self._clopper_pearson_bounds(n_d_match, n_d_ante, alpha / 2.0)
+                delta_lower, delta_upper = l_u + l_d - 1.0, u_u + u_d - 1.0
             elif use_wilson:
                 # Newcombe (1998) combination of single-proportion Wilson intervals.
                 _, l_u, u_u = self._wilson_bounds(n_u_match, n_u_ante, z)

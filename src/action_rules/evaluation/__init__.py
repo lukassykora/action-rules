@@ -19,14 +19,7 @@ Targeting metric references
 """
 
 from .cv import CrossValidationResult, CrossValidator, cross_validate
-from .metrics import (
-    auuc,
-    incremental_profit_at_k,
-    qini_coefficient,
-    qini_curve,
-    realistic_gain_at_k,
-    uplift_at_k,
-)
+from .metrics import auuc, incremental_profit_at_k, qini_coefficient, qini_curve, realistic_gain_at_k, uplift_at_k
 
 __all__ = [
     'CrossValidator',

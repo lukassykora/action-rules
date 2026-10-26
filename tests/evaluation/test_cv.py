@@ -359,8 +359,7 @@ class TestInsampleBaseline:
         df = _make_dataset()
         result = self._build().run(df)
         assert result.insample_summary is None, (
-            "Default behaviour must leave insample_summary unset so existing "
-            "consumers see no schema change."
+            "Default behaviour must leave insample_summary unset so existing " "consumers see no schema change."
         )
 
     def test_enabled_returns_dataframe(self):

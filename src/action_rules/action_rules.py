@@ -1018,11 +1018,11 @@ class ActionRules:
               combining two single-proportion Wilson score intervals; the
               resulting interval is asymmetric.  ``'wilson'`` is retained
               as a backward-compatible alias.
-            - ``'clopper_pearson'`` — exact Clopper-Pearson single-proportion
-              intervals combined with Newcombe's square-and-add rule.
+            - ``'clopper_pearson'`` — conservative rectangular contrast from
+              Clopper-Pearson component bounds at a Bonferroni-split level.
             - ``'auto'`` — Newcombe-Wilson when sample is small (``n < 40``)
               or proportion is extreme (``< 0.05`` or ``> 0.95``), Wald
-              otherwise (following Agresti & Coull, 1998).
+              otherwise. The numerical cutoffs are engineering heuristics.
         bootstrap_type : str, optional
             Sub-type of the bootstrap method.  Only used when
             ``method='bootstrap'``.  One of:

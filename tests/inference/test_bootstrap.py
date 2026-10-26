@@ -604,7 +604,7 @@ class TestBCaInternalMethods:
         jack = BootstrapEngine._jackknife_uplift(u_ante, u_match, d_ante, d_match, n)
         assert jack.shape == (n,)
 
-    def test_jackknife_uplift_zero_when_no_support(self):
+    def test_jackknife_uplift_nan_when_no_support(self):
         """Leave-one-out uplift is 0.0 when antecedent count drops to zero."""
         # Only one row matches the undesired antecedent — leaving it out makes nu=0.
         n = 5
@@ -614,7 +614,7 @@ class TestBCaInternalMethods:
         d_match = np.array([True, True, True, True, False])
         jack = BootstrapEngine._jackknife_uplift(u_ante, u_match, d_ante, d_match, n)
         # Leaving out row 0 drops nu to 0 → uplift set to 0.0.
-        assert jack[0] == 0.0
+        assert np.isnan(jack[0])
 
 
 class TestDegenerateResampleReporting:

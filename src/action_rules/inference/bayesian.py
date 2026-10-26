@@ -16,6 +16,7 @@ import pandas as pd
 from .base import (
     ConfidenceIntervalResult,
     InferenceEngine,
+    RuleCategory,
     bonferroni_confidence_level,
     categorize_rule,
     compute_group_counts,
@@ -70,10 +71,8 @@ class BayesianEngine(InferenceEngine):
 
     and analogously for the desired side.
 
-    When *n_u_ante* or *n_d_ante* is zero, no likelihood information is
-    available and the posterior equals the prior.  Samples are still drawn
-    (a ``Beta(1, 1)`` with the default flat prior), resulting in very wide
-    intervals that correctly reflect the lack of evidence.
+    A zero antecedent count returns NaN interval bounds and UNSUPPORTED.
+    Prior-only predictions are not interpreted as supported empirical rules.
 
     The point estimate reported is the posterior mean of the uplift samples
     (not the analytic posterior mean of each Beta), which is consistent with
@@ -112,6 +111,8 @@ class BayesianEngine(InferenceEngine):
         if prior_alpha < 0 or prior_beta < 0:
             raise ValueError(f"prior_alpha and prior_beta must be >= 0, got {prior_alpha}, {prior_beta}.")
         validate_simultaneous_m(simultaneous_m)
+        if not isinstance(n_mc, int) or isinstance(n_mc, bool) or n_mc < 2:
+            raise ValueError("n_mc must be an integer >= 2.")
         self.n_mc = n_mc
         self.prior_alpha = prior_alpha
         self.prior_beta = prior_beta
@@ -185,6 +186,30 @@ class BayesianEngine(InferenceEngine):
 
         for rule in rules:
             n_u_ante, n_u_match, n_d_ante, n_d_match, n_total = compute_group_counts(data, rule)
+
+            # Empty antecedents have no supported empirical contrast. In particular,
+            # multiplying a prior-only contrast by zero must not produce ACCEPT.
+            if n_u_ante == 0 or n_d_ante == 0 or n_total == 0:
+                nan = float('nan')
+                results.append(
+                    ConfidenceIntervalResult(
+                        rule_index=rule.rule_index,
+                        method='bayesian',
+                        confidence_level=confidence_level,
+                        uplift_point=nan,
+                        uplift_ci_lower=nan,
+                        uplift_ci_upper=nan,
+                        uplift_se=nan,
+                        realistic_rule_gain_point=nan if compute_gain else None,
+                        realistic_rule_gain_ci_lower=nan if compute_gain else None,
+                        realistic_rule_gain_ci_upper=nan if compute_gain else None,
+                        realistic_rule_gain_se=nan if compute_gain else None,
+                        support=n_u_ante,
+                        confidence=0.0,
+                        category=RuleCategory.UNSUPPORTED,
+                    )
+                )
+                continue
 
             # ------------------------------------------------------------------
             # Beta posterior parameters (conjugate update).

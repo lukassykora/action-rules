@@ -1,13 +1,7 @@
 """Inference module for confidence interval computation on action rules."""
 
 from .analytic import AnalyticEngine
-from .base import (
-    ConfidenceIntervalResult,
-    InferenceEngine,
-    RuleCategory,
-    RuleMasks,
-    results_to_dataframe,
-)
+from .base import ConfidenceIntervalResult, InferenceEngine, RuleCategory, RuleMasks, results_to_dataframe
 from .bayesian import BayesianEngine
 from .bootstrap import BootstrapEngine
 

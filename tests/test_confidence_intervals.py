@@ -303,8 +303,8 @@ class TestConfidenceIntervalsBootstrap:
         res2 = ar2.confidence_intervals(data, method='bootstrap', n_bootstrap=50, random_state=99)
 
         for r1, r2 in zip(res1, res2):
-            assert r1.uplift_ci_lower == r2.uplift_ci_lower
-            assert r1.uplift_ci_upper == r2.uplift_ci_upper
+            np.testing.assert_equal(r1.uplift_ci_lower, r2.uplift_ci_lower)
+            np.testing.assert_equal(r1.uplift_ci_upper, r2.uplift_ci_upper)
 
     def test_samples_stored(self, fitted_ar):
         """
@@ -546,8 +546,8 @@ class TestConfidenceIntervalsBayesian:
         res2 = ar2.confidence_intervals(data, method='bayesian', n_mc=100, random_state=7)
 
         for r1, r2 in zip(res1, res2):
-            assert r1.uplift_ci_lower == r2.uplift_ci_lower
-            assert r1.uplift_ci_upper == r2.uplift_ci_upper
+            np.testing.assert_equal(r1.uplift_ci_lower, r2.uplift_ci_lower)
+            np.testing.assert_equal(r1.uplift_ci_upper, r2.uplift_ci_upper)
 
 
 # ---------------------------------------------------------------------------
@@ -667,7 +667,7 @@ class TestCategorization:
         """
         ar = _make_action_rules()
         ar.fit(
-            _DATA.copy(),
+            pd.concat([_DATA] * 10, ignore_index=True),
             stable_attributes=['Sex'],
             flexible_attributes=['Class'],
             target='Survived',
@@ -675,7 +675,11 @@ class TestCategorization:
             target_desired_state='1',
         )
         results = ar.confidence_intervals(
-            _DATA.copy(), method='bootstrap', n_bootstrap=200, random_state=42, threshold=0.0
+            pd.concat([_DATA] * 10, ignore_index=True),
+            method='bootstrap',
+            n_bootstrap=200,
+            random_state=42,
+            threshold=0.0,
         )
         for r in results:
             assert (
@@ -695,7 +699,7 @@ class TestCategorization:
         """
         ar = _make_action_rules()
         ar.fit(
-            _DATA.copy(),
+            pd.concat([_DATA] * 10, ignore_index=True),
             stable_attributes=['Sex'],
             flexible_attributes=['Class'],
             target='Survived',
@@ -703,7 +707,11 @@ class TestCategorization:
             target_desired_state='1',
         )
         results = ar.confidence_intervals(
-            _DATA.copy(), method='bootstrap', n_bootstrap=50, random_state=42, threshold=10.0
+            pd.concat([_DATA] * 10, ignore_index=True),
+            method='bootstrap',
+            n_bootstrap=50,
+            random_state=42,
+            threshold=10.0,
         )
         for r in results:
             assert (
@@ -714,7 +722,7 @@ class TestCategorization:
         """
         Verify that a moderate threshold produces UNCERTAIN categorizations.
 
-        With threshold=0.1 (inside the bootstrap CI for the synthetic data)
+        With threshold=0.15 (inside the bootstrap CI for the synthetic data)
         the CI straddles the threshold, yielding UNCERTAIN.
 
         Asserts
@@ -723,7 +731,7 @@ class TestCategorization:
         """
         ar = _make_action_rules()
         ar.fit(
-            _DATA.copy(),
+            pd.concat([_DATA] * 10, ignore_index=True),
             stable_attributes=['Sex'],
             flexible_attributes=['Class'],
             target='Survived',
@@ -731,12 +739,16 @@ class TestCategorization:
             target_desired_state='1',
         )
         results = ar.confidence_intervals(
-            _DATA.copy(), method='bootstrap', n_bootstrap=200, random_state=42, threshold=0.1
+            pd.concat([_DATA] * 10, ignore_index=True),
+            method='bootstrap',
+            n_bootstrap=200,
+            random_state=42,
+            threshold=0.15,
         )
         categories = [r.category for r in results]
         assert (
             RuleCategory.UNCERTAIN in categories
-        ), f"Expected at least one UNCERTAIN result with threshold=0.1, got: {[c.value for c in categories]}"
+        ), f"Expected at least one UNCERTAIN result with threshold=0.15, got: {[c.value for c in categories]}"
 
     def test_categorize_realistic_rule_gain_with_threshold(self, fitted_ar_with_utility):
         """Categorize realistic_rule_gain results when a threshold is provided.

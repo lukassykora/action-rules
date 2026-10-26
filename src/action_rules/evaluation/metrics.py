@@ -1,12 +1,12 @@
 """Rule-level targeting metrics for action-rule cross-validation.
 
 The metrics treat each *action rule* as a candidate targeting policy and
-quantify how the policies would perform if deployed.  Each function takes a
+summarize held-out observational rule estimates.  Each function takes a
 parallel set of arrays where one entry corresponds to one rule:
 
 - ``scores`` — the ranking signal (e.g. point-estimate uplift on the training
   fold, or a lower confidence bound, or a risk-adjusted score).
-- ``outcomes`` — the realized effect on the held-out fold (e.g. test-set
+- ``outcomes`` — the estimated associational contrast on the held-out fold (e.g. test-set
   uplift, test-set realistic gain).
 - ``supports`` — optional rule support on the held-out fold; used as weights
   in the Qini / AUUC curves so that high-coverage rules contribute more to
@@ -15,7 +15,7 @@ parallel set of arrays where one entry corresponds to one rule:
 When ``supports`` is omitted the curves treat every rule as equally weighted,
 which corresponds to a "rule-counted" interpretation.  When ``supports`` is
 provided the curves use *coverage-weighted* cumulative sums, which matches
-the standard "instance-counted" Qini definition (Radcliffe, 2007).
+a coverage-weighted rule diagnostic, not a deduplicated causal Qini.
 """
 
 from typing import List, Optional, Tuple, Union
@@ -191,9 +191,9 @@ def qini_curve(
 
     Notes
     -----
-    When the sum of effects is non-positive (degenerate case), the y-axis
-    is left unnormalized to preserve sign information.  This mirrors the
-    behavior of ``scikit-uplift``'s :func:`uplift_auc_score`.
+    Normalization is undefined when total weight or weighted effect is
+    nonpositive; NaN is returned instead of a differently scaled statistic.
+    Overlapping rule aggregates are not an instance-level causal Qini.
 
     References
     ----------
@@ -212,16 +212,22 @@ def qini_curve(
     if n == 0:
         return np.array([0.0]), np.array([0.0])
 
+    if not np.all(np.isfinite(s)) or not np.all(np.isfinite(o)) or not np.all(np.isfinite(w)):
+        return np.array([0.0, 1.0]), np.array([float('nan'), float('nan')])
+    if np.any(w < 0):
+        raise ValueError("supports must be nonnegative.")
     order = np.argsort(-s, kind='stable')
     cum_w = np.cumsum(w[order])
     cum_effect = np.cumsum(o[order] * w[order])
 
-    total_w = cum_w[-1] if cum_w[-1] > 0 else 1.0
+    total_w = cum_w[-1]
     total_effect = cum_effect[-1]
+    if total_w <= 0 or total_effect <= 0:
+        return np.array([0.0, 1.0]), np.array([float('nan'), float('nan')])
     norm_effect = total_effect if total_effect != 0 else 1.0
     # Preserve sign on degenerate (non-positive total) cases by skipping
     # normalization — see the Notes section above.
-    y_denom = norm_effect if total_effect > 0 else 1.0
+    y_denom = norm_effect
 
     x = np.concatenate(([0.0], cum_w / total_w))
     y = np.concatenate(([0.0], cum_effect / y_denom))

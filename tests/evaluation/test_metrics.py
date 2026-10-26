@@ -147,7 +147,7 @@ class TestAuucAndQini:
         """Check that the Qini coefficient equals AUUC minus 0.5."""
         rng = np.random.default_rng(0)
         scores = rng.normal(size=20)
-        outcomes = scores + rng.normal(scale=0.1, size=20)
+        outcomes = 2.0 + scores + rng.normal(scale=0.1, size=20)
         assert qini_coefficient(scores, outcomes) == pytest.approx(auuc(scores, outcomes) - 0.5)
 
     def test_random_ranking_qini_near_zero(self):

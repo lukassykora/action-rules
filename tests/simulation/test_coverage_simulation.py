@@ -8,13 +8,7 @@ statistical sense (which would need ``R=500+`` replicates).
 
 import pandas as pd
 
-from tests.simulation.coverage_simulation import (
-    DGPParams,
-    aggregate_records,
-    generate_dataset,
-    run_grid,
-    run_replicate,
-)
+from tests.simulation.coverage_simulation import DGPParams, aggregate_records, generate_dataset, run_grid, run_replicate
 
 
 class TestDGP:
