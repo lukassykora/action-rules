@@ -171,3 +171,16 @@ class TestCategorizeRule:
         """Verify a CI lower bound equal to the threshold yields ACCEPT."""
         # Boundary case: ci_lower exactly at threshold counts as ACCEPT.
         assert categorize_rule(0.0, 0.2, threshold=0.0) is RuleCategory.ACCEPT
+
+    def test_unsupported_when_bounds_nan(self):
+        """Verify NaN CI bounds yield RuleCategory.UNSUPPORTED."""
+        assert categorize_rule(float('nan'), float('nan'), threshold=0.0) is RuleCategory.UNSUPPORTED
+        assert categorize_rule(float('nan'), 0.2, threshold=0.0) is RuleCategory.UNSUPPORTED
+
+    def test_decision_status_property(self):
+        """Verify ConfidenceIntervalResult.decision_status returns 4-way status."""
+        r_acc = _make_result(0, category=RuleCategory.ACCEPT)
+        assert r_acc.decision_status == 'accept'
+        r_unsup = _make_result(1, category=None)
+        r_unsup.support = 0
+        assert r_unsup.decision_status == 'unsupported'

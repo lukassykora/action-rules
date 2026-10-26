@@ -190,3 +190,13 @@
 * Docs: Removed the stale `# min 0.5` comments from the README and usage docs — the confidence thresholds have no enforced lower bound.
 * Tests: Added a regression test covering mining with confidence thresholds below 0.5.
 * Examples: The Telco utility tables now price every flexible attribute state (InternetService and PhoneService margins, explicit `No internet service` levels), so cancelling a service line is no longer treated as free; the `telco_tour` notebooks and outputs were regenerated (seeded, reproducible).
+
+## [2.1.0] - 2026-10-26
+
+* Feature: Random-design delta-method Wald confidence intervals (`analytic_type='wald_rd'` / `method='wald_rd'`) accounting for random antecedent prevalence alongside conditional rule confidences.
+* Feature: Exact Clopper-Pearson single-proportion intervals combined via Newcombe's square-and-add formula (`analytic_type='clopper_pearson'`) and Bonferroni simultaneous multiplicity adjustment (`simultaneous_m`).
+* Feature: Named conjugate priors (`prior='jeffreys'`, `'uniform'`, `'haldane'`) in `BayesianEngine` and `method='jeffreys'` shortcut in `ActionRules.confidence_intervals()`.
+* Feature: Honest two-stage sample-splitting inference (`method='honest_split'`) and fast vectorised 5-cell multinomial bootstrap resampling (`resample_mode='multinomial'`).
+* Feature: Added `RuleCategory.UNSUPPORTED` and `ConfidenceIntervalResult.decision_status` for four-way rule categorisation (`accept`, `reject`, `uncertain`, `unsupported`) when antecedent support is zero or CI bounds are `NaN`.
+* Fix: Guarded `Rules.calculate_uplift` against zero division when `undesired_confidence == 0` or `count_transactions == 0`, and prevented self-pairing of identical classification rule itemsets in `Rules.generate_action_rules` when mining with low confidence thresholds (`< 0.5`).
+* Notebooks: Added automatic dataset download and caching fallbacks in `notebooks/article/_datasets.py` for UCI Bank Marketing, IBM Employee Attrition, and Taiwan Credit Card Default.

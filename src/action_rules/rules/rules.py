@@ -183,6 +183,13 @@ class Rules:
         for attribute_prefix, rules in self.classification_rules.items():
             for desired_rule in rules['desired']:
                 for undesired_rule in rules['undesired']:
+                    # Skip degenerate self-transitions when a real flexible prefix is present
+                    if (
+                        len(attribute_prefix) > 0
+                        and undesired_rule.get('itemset') is not None
+                        and undesired_rule.get('itemset') == desired_rule.get('itemset')
+                    ):
+                        continue
                     # Uplift
                     uplift = self.calculate_uplift(
                         undesired_rule['support'],
@@ -299,6 +306,8 @@ class Rules:
         Uplift measures the increase in the probability of achieving the desired state when applying the action rule
         compared to not applying it. It is used to assess the effectiveness of the rule.
         """
+        if undesired_confidence == 0 or self.count_transactions == 0:
+            return 0.0
         return (
             (desired_confidence - (1 - undesired_confidence)) * (undesired_support / undesired_confidence)
         ) / self.count_transactions

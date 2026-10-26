@@ -7,6 +7,7 @@ functions consumed by all CI engines (analytic, bootstrap, Bayesian).
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
+import math
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -32,11 +33,14 @@ class RuleCategory(Enum):
         The entire CI is below the threshold — rule should be discarded.
     UNCERTAIN : str
         The CI straddles the threshold — insufficient evidence to decide.
+    UNSUPPORTED : str
+        Zero antecedent support or undefined CI bounds (NaN).
     """
 
     ACCEPT = 'accept'
     REJECT = 'reject'
     UNCERTAIN = 'uncertain'
+    UNSUPPORTED = 'unsupported'
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +150,27 @@ class ConfidenceIntervalResult:
     undefined_bootstrap_fraction: Optional[float] = None
     samples_uplift: Optional[np.ndarray] = field(default=None, repr=False)
     samples_gain: Optional[np.ndarray] = field(default=None, repr=False)
+
+    @property
+    def decision_status(self) -> str:
+        """Return a four-way decision status string.
+
+        Returns
+        -------
+        str
+            One of ``'accept'``, ``'reject'``, ``'uncertain'``, or
+            ``'unsupported'`` (when ``support == 0`` or CI bounds are ``NaN``).
+        """
+        if (
+            self.support == 0
+            or math.isnan(self.uplift_ci_lower)
+            or math.isnan(self.uplift_ci_upper)
+            or self.category == RuleCategory.UNSUPPORTED
+        ):
+            return RuleCategory.UNSUPPORTED.value
+        if self.category is not None:
+            return self.category.value
+        return RuleCategory.UNCERTAIN.value
 
     def to_dict(self, include_samples: bool = False) -> dict:
         """Return a plain dict representation of this result.
@@ -601,10 +626,13 @@ def categorize_rule(ci_lower: float, ci_upper: float, threshold: float) -> RuleC
     Returns
     -------
     RuleCategory
+        - :attr:`RuleCategory.UNSUPPORTED` when either CI bound is ``NaN``
         - :attr:`RuleCategory.ACCEPT` when ``ci_lower >= threshold``
         - :attr:`RuleCategory.REJECT` when ``ci_upper < threshold``
         - :attr:`RuleCategory.UNCERTAIN` otherwise
     """
+    if math.isnan(ci_lower) or math.isnan(ci_upper):
+        return RuleCategory.UNSUPPORTED
     if ci_lower >= threshold:
         return RuleCategory.ACCEPT
     if ci_upper < threshold:

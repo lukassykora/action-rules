@@ -74,11 +74,26 @@ class BayesianEngine(InferenceEngine):
         prior_alpha: float = 1.0,
         prior_beta: float = 1.0,
         random_state: Optional[int] = None,
+        *,
+        prior: Optional[str] = None,
     ):
+        if prior is not None:
+            prior_norm = prior.lower()
+            if prior_norm in ("uniform", "laplace"):
+                prior_alpha, prior_beta = 1.0, 1.0
+            elif prior_norm == "jeffreys":
+                prior_alpha, prior_beta = 0.5, 0.5
+            elif prior_norm == "haldane":
+                prior_alpha, prior_beta = 0.01, 0.01
+            else:
+                raise ValueError(
+                    f"Unknown prior '{prior}'. Choose from {{'uniform', 'laplace', 'jeffreys', 'haldane'}}."
+                )
         self.n_mc = n_mc
         self.prior_alpha = prior_alpha
         self.prior_beta = prior_beta
         self.random_state = random_state
+        self.prior = prior
 
     # ------------------------------------------------------------------
     # Public API

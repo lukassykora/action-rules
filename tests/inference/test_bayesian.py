@@ -451,3 +451,14 @@ class TestMultipleRules:
         result = BayesianEngine(n_mc=5000, random_state=0).compute(data, [_make_rule()])[0]
         # The synthetic data gives perfect uplift; the posterior CI should be fully > 0.
         assert result.category == RuleCategory.ACCEPT
+
+    def test_named_priors_jeffreys_and_uniform(self):
+        """Named priors 'jeffreys', 'uniform', and 'haldane' set the expected Beta hyperparameters."""
+        eng_j = BayesianEngine(n_mc=100, random_state=0, prior="jeffreys")
+        assert eng_j.prior_alpha == 0.5 and eng_j.prior_beta == 0.5
+        eng_u = BayesianEngine(n_mc=100, random_state=0, prior="uniform")
+        assert eng_u.prior_alpha == 1.0 and eng_u.prior_beta == 1.0
+        eng_h = BayesianEngine(n_mc=100, random_state=0, prior="haldane")
+        assert eng_h.prior_alpha == 0.01 and eng_h.prior_beta == 0.01
+        with pytest.raises(ValueError, match="Unknown prior"):
+            BayesianEngine(prior="invalid_prior")

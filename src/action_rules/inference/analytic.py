@@ -88,7 +88,7 @@ class AnalyticEngine(InferenceEngine):
     # Initialisation
     # ------------------------------------------------------------------
 
-    def __init__(self, analytic_type: str = "wald") -> None:
+    def __init__(self, analytic_type: str = "wald", simultaneous_m: Optional[int] = None) -> None:
         r"""Initialise the engine with the chosen interval type.
 
         Parameters
@@ -97,31 +97,50 @@ class AnalyticEngine(InferenceEngine):
             Which closed-form interval to use.  One of:
 
             ``'wald'``
-                Standard Wald (normal approximation) interval.  Default and
-                backward-compatible choice.
+                Standard Wald (normal approximation) interval under fixed-
+                antecedent conditioning.  Default and backward-compatible choice.
+            ``'wald_rd'`` or ``'wald_random'``
+                Random-design (RD) delta-method Wald interval that propagates
+                uncertainty in the antecedent prevalence :math:`\hat{q}_u = n_u / N`
+                alongside the conditional proportions :math:`\hat{p}_u, \hat{p}_d`.
             ``'newcombe_wilson'`` (preferred) or ``'wilson'`` (alias)
                 Newcombe-Wilson interval for the unscaled rule contrast
-                :math:`\\delta = p_d + p_u - 1` (Newcombe, 1998), built by
+                :math:`\delta = p_d + p_u - 1` (Newcombe, 1998), built by
                 combining two single-proportion Wilson score intervals.
                 More accurate for small samples or proportions near 0 or 1.
                 ``'wilson'`` is retained as a backward-compatible alias and
                 resolves to the same Newcombe-Wilson construction.
+            ``'clopper_pearson'``
+                Exact Clopper-Pearson single-proportion intervals combined via
+                Newcombe's square-and-add root.
             ``'auto'``
                 Selects the Newcombe-Wilson branch when either side has
                 ``n < 40`` or ``p < 0.05`` / ``p > 0.95``; falls back to
                 Wald otherwise (Agresti & Coull, 1998).
+        simultaneous_m : int, optional
+            When provided (``>= 1``), applies a Bonferroni simultaneous
+            multiplicity correction over *simultaneous_m* candidate rules by
+            setting :math:`\alpha_{\mathrm{eff}} = (1 - \text{confidence\_level}) / m`.
 
         Raises
         ------
         ValueError
-            If *analytic_type* is not one of the recognised values.
+            If *analytic_type* is not one of the recognised values or
+            *simultaneous_m* is less than 1.
         """
-        valid = {"wald", "wilson", "newcombe_wilson", "auto"}
+        valid = {"wald", "wald_rd", "wald_random", "wilson", "newcombe_wilson", "clopper_pearson", "auto"}
         if analytic_type not in valid:
             raise ValueError(f"Unknown analytic_type '{analytic_type}'. Choose from {valid}.")
-        # Canonicalise: 'wilson' is a backward-compatible alias for
-        # 'newcombe_wilson'.  Both invoke the same Newcombe-Wilson code path.
-        self.analytic_type = "newcombe_wilson" if analytic_type == "wilson" else analytic_type
+        if simultaneous_m is not None and simultaneous_m < 1:
+            raise ValueError(f"simultaneous_m must be >= 1, got {simultaneous_m}.")
+        # Canonicalise aliases
+        if analytic_type == "wilson":
+            self.analytic_type = "newcombe_wilson"
+        elif analytic_type == "wald_random":
+            self.analytic_type = "wald_rd"
+        else:
+            self.analytic_type = analytic_type
+        self.simultaneous_m = simultaneous_m
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -206,6 +225,38 @@ class AnalyticEngine(InferenceEngine):
         upper = delta_hat + sqrt((u_d - p_d) ** 2 + (u_u - p_u) ** 2)
         return delta_hat, lower, upper
 
+    @staticmethod
+    def _clopper_pearson_bounds(x: float, n: float, alpha: float) -> Tuple[float, float, float]:
+        """Single-proportion exact Clopper-Pearson interval (Clopper & Pearson, 1934).
+
+        Parameters
+        ----------
+        x : float
+            Number of successes.
+        n : float
+            Number of trials.
+        alpha : float
+            Two-sided significance level ``1 - confidence_level``.
+
+        Returns
+        -------
+        p_hat : float
+            Maximum-likelihood proportion ``x / n``.
+        lower : float
+            Exact Clopper-Pearson lower bound.
+        upper : float
+            Exact Clopper-Pearson upper bound.
+        """
+        if n <= 0:
+            nan = float('nan')
+            return nan, nan, nan
+        from scipy.stats import beta
+
+        p_hat = x / n
+        lower = 0.0 if x <= 0 else float(beta.ppf(alpha / 2.0, x, n - x + 1.0))
+        upper = 1.0 if x >= n else float(beta.ppf(1.0 - alpha / 2.0, x + 1.0, n - x))
+        return p_hat, lower, upper
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -265,6 +316,8 @@ class AnalyticEngine(InferenceEngine):
         compute_gain = (intrinsic_utility_table is not None) or (transition_utility_table is not None)
 
         alpha = 1.0 - confidence_level
+        if self.simultaneous_m is not None and self.simultaneous_m > 1:
+            alpha = alpha / float(self.simultaneous_m)
         z = norm.ppf(1.0 - alpha / 2.0)
 
         results: List[ConfidenceIntervalResult] = []
@@ -313,7 +366,17 @@ class AnalyticEngine(InferenceEngine):
                 and (n_u_ante < 40 or n_d_ante < 40 or p_u < 0.05 or p_u > 0.95 or p_d < 0.05 or p_d > 0.95)
             )
 
-            if use_wilson:
+            var_p_u = p_u * (1.0 - p_u) / n_u_ante
+            var_p_d = p_d * (1.0 - p_d) / n_d_ante
+            var_delta = var_p_u + var_p_d
+
+            if self.analytic_type == "clopper_pearson":
+                _, l_u, u_u = self._clopper_pearson_bounds(n_u_match, n_u_ante, alpha)
+                _, l_d, u_d = self._clopper_pearson_bounds(n_d_match, n_d_ante, alpha)
+                _, delta_lower, delta_upper = self._newcombe_delta_interval(
+                    p_u, l_u, u_u, p_d, l_d, u_d
+                )
+            elif use_wilson:
                 # Newcombe (1998) combination of single-proportion Wilson intervals.
                 _, l_u, u_u = self._wilson_bounds(n_u_match, n_u_ante, z)
                 _, l_d, u_d = self._wilson_bounds(n_d_match, n_d_ante, z)
@@ -322,21 +385,25 @@ class AnalyticEngine(InferenceEngine):
                 )
             else:
                 # Wald delta-method interval for delta = p_d + p_u - 1.
-                var_p_u = p_u * (1.0 - p_u) / n_u_ante
-                var_p_d = p_d * (1.0 - p_d) / n_d_ante
-                var_delta = var_p_u + var_p_d
                 delta_se = sqrt(var_delta)
                 delta_lower = delta_hat - z * delta_se
                 delta_upper = delta_hat + z * delta_se
 
             # Transform delta -> population-scaled uplift.
             uplift_point = delta_hat * scale
-            uplift_lower = delta_lower * scale
-            uplift_upper = delta_upper * scale
-            # Average half-width divided by z gives an SE-equivalent for an
-            # asymmetric interval; reduces to the exact Wald SE in the Wald
-            # branch.
-            se_uplift = (uplift_upper - uplift_lower) / (2.0 * z) if z > 0 else 0.0
+            if self.analytic_type == "wald_rd":
+                # Random-design delta-method variance: accounts for random antecedent prevalence q_u = n_u / N.
+                var_uplift = (scale ** 2) * var_delta + (delta_hat ** 2) * (scale * (1.0 - scale) / n_total)
+                se_uplift = sqrt(var_uplift)
+                uplift_lower = uplift_point - z * se_uplift
+                uplift_upper = uplift_point + z * se_uplift
+            else:
+                uplift_lower = delta_lower * scale
+                uplift_upper = delta_upper * scale
+                # Average half-width divided by z gives an SE-equivalent for an
+                # asymmetric interval; reduces to the exact Wald SE in the Wald
+                # branch.
+                se_uplift = (uplift_upper - uplift_lower) / (2.0 * z) if z > 0 else 0.0
 
             support = n_u_ante
             confidence = p_u

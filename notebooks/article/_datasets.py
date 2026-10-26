@@ -135,9 +135,30 @@ def load_telco() -> DatasetConfig:
     )
 
 
+def _ensure_bank_marketing_csv() -> Path:
+    """Return path to bank_marketing.csv, downloading from UCI if not cached."""
+    csv_path = _ci_data_dir() / 'bank_marketing.csv'
+    if csv_path.exists():
+        return csv_path
+    import io
+    import urllib.request
+    import zipfile
+
+    _ci_data_dir().mkdir(parents=True, exist_ok=True)
+    outer_url = 'https://archive.ics.uci.edu/static/public/222/bank+marketing.zip'
+    with urllib.request.urlopen(outer_url, timeout=60) as resp:
+        outer_bytes = resp.read()
+    with zipfile.ZipFile(io.BytesIO(outer_bytes)) as outer_zf:
+        inner_bytes = outer_zf.read('bank-additional.zip')
+    with zipfile.ZipFile(io.BytesIO(inner_bytes)) as inner_zf:
+        csv_bytes = inner_zf.read('bank-additional/bank-additional-full.csv')
+    csv_path.write_bytes(csv_bytes)
+    return csv_path
+
+
 def load_bank_marketing() -> DatasetConfig:
     """UCI Bank Marketing — 41,188 calls (discretized as in notebooks/ci/BankMarketing.ipynb)."""
-    raw = pd.read_csv(_ci_data_dir() / 'bank_marketing.csv', sep=';')
+    raw = pd.read_csv(_ensure_bank_marketing_csv(), sep=';')
 
     df = raw.drop(
         columns=[
@@ -202,12 +223,25 @@ def load_bank_marketing() -> DatasetConfig:
     )
 
 
+def _ensure_employee_attrition_csv() -> Path:
+    """Return path to employee_attrition.csv, downloading from IBM GitHub if not cached."""
+    csv_path = _ci_data_dir() / 'employee_attrition.csv'
+    if csv_path.exists():
+        return csv_path
+    import urllib.request
+
+    _ci_data_dir().mkdir(parents=True, exist_ok=True)
+    url = 'https://raw.githubusercontent.com/IBM/employee-attrition-aif360/master/data/emp_attrition.csv'
+    urllib.request.urlretrieve(url, str(csv_path))
+    return csv_path
+
+
 def load_employee_attrition() -> DatasetConfig:
     """IBM Employee Attrition — 1,470 employees.
 
     Mirrors the preprocessing in ``notebooks/ci/EmployeeAttrition.ipynb`` exactly.
     """
-    raw = pd.read_csv(_ci_data_dir() / 'employee_attrition.csv')
+    raw = pd.read_csv(_ensure_employee_attrition_csv())
     df = raw.copy()
 
     df = df.drop(columns=['EmployeeCount', 'Over18', 'StandardHours', 'EmployeeNumber'], errors='ignore')
@@ -291,13 +325,84 @@ def load_employee_attrition() -> DatasetConfig:
     )
 
 
+def _ensure_credit_default_csv() -> Path:
+    """Return path to credit_default.csv, downloading and preprocessing if not cached."""
+    csv_path = _ci_data_dir() / 'credit_default.csv'
+    if csv_path.exists():
+        return csv_path
+    import io
+    import urllib.request
+    import zipfile
+
+    _ci_data_dir().mkdir(parents=True, exist_ok=True)
+    xls_path = _ci_data_dir() / 'credit_default.xls'
+    if not xls_path.exists():
+        zip_url = 'https://archive.ics.uci.edu/static/public/350/default+of+credit+card+clients.zip'
+        with urllib.request.urlopen(zip_url, timeout=60) as resp:
+            zip_bytes = resp.read()
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            xls_bytes = zf.read('default of credit card clients.xls')
+        xls_path.write_bytes(xls_bytes)
+
+    raw = pd.read_excel(xls_path, header=1)
+    df = raw.copy().drop(columns=['ID'], errors='ignore')
+    df = df.rename(columns={'default.payment.next.month': 'Default', 'default payment next month': 'Default'})
+    df['Default'] = df['Default'].map({1: 'Yes', 0: 'No'})
+    df['SEX'] = df['SEX'].map({1: 'male', 2: 'female'})
+    edu_map = {1: 'graduate', 2: 'university', 3: 'high_school'}
+    df['EDUCATION'] = df['EDUCATION'].apply(lambda x: edu_map.get(x, 'other'))
+    marriage_map = {1: 'married', 2: 'single'}
+    df['MARRIAGE'] = df['MARRIAGE'].apply(lambda x: marriage_map.get(x, 'other'))
+
+    def _map_pay_status(x):
+        if x == -2:
+            return 'no_consumption'
+        if x == -1:
+            return 'paid_duly'
+        if x == 0:
+            return 'revolving'
+        if x == 1:
+            return 'delay_1m'
+        if x == 2:
+            return 'delay_2m'
+        return 'delay_3m_plus'
+
+    df['PAY_0'] = df['PAY_0'].apply(_map_pay_status)
+    df['PAY_2'] = df['PAY_2'].apply(_map_pay_status)
+    df['LIMIT_BAL'] = pd.cut(
+        df['LIMIT_BAL'], bins=[-1, 50000, 200000, float('inf')], labels=['low', 'medium', 'high']
+    ).astype(str)
+    df['AGE'] = pd.cut(df['AGE'], bins=[0, 29, 45, float('inf')], labels=['young', 'middle', 'senior']).astype(str)
+    df['BILL_AMT1'] = pd.cut(
+        df['BILL_AMT1'], bins=[-float('inf'), 10000, 50000, float('inf')], labels=['low', 'medium', 'high']
+    ).astype(str)
+    df['PAY_AMT1'] = pd.cut(
+        df['PAY_AMT1'], bins=[-1, 2000, 10000, float('inf')], labels=['low', 'medium', 'high']
+    ).astype(str)
+    keep_cols = [
+        'SEX',
+        'EDUCATION',
+        'MARRIAGE',
+        'AGE',
+        'LIMIT_BAL',
+        'PAY_0',
+        'PAY_2',
+        'BILL_AMT1',
+        'PAY_AMT1',
+        'Default',
+    ]
+    df = df[keep_cols]
+    df.to_csv(csv_path, index=False)
+    return csv_path
+
+
 def load_credit_card_default() -> DatasetConfig:
     """Taiwan Credit Card Default — 30,000 customers.
 
     The CSV under ``notebooks/ci/data/`` is already fully preprocessed (string
     categoricals throughout).  We load and use it directly.
     """
-    df = pd.read_csv(_ci_data_dir() / 'credit_default.csv')
+    df = pd.read_csv(_ensure_credit_default_csv())
 
     intrinsic = {
         ('Default', 'No'): 1000.0,
