@@ -4,10 +4,10 @@ Provides the abstract base class, data classes, enums, and shared helper
 functions consumed by all CI engines (analytic, bootstrap, Bayesian).
 """
 
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-import math
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -638,3 +638,49 @@ def categorize_rule(ci_lower: float, ci_upper: float, threshold: float) -> RuleC
     if ci_upper < threshold:
         return RuleCategory.REJECT
     return RuleCategory.UNCERTAIN
+
+
+def validate_simultaneous_m(simultaneous_m: Optional[int]) -> None:
+    """Validate the Bonferroni family size shared by all CI engines.
+
+    Parameters
+    ----------
+    simultaneous_m : int, optional
+        Number of simultaneously reported rules, or ``None`` for no
+        multiplicity adjustment.
+
+    Raises
+    ------
+    ValueError
+        If *simultaneous_m* is not ``None`` and not an integer ``>= 1``.
+    """
+    if simultaneous_m is None:
+        return
+    if isinstance(simultaneous_m, bool) or not isinstance(simultaneous_m, (int, np.integer)) or simultaneous_m < 1:
+        raise ValueError(f"simultaneous_m must be an integer >= 1, got {simultaneous_m!r}.")
+
+
+def bonferroni_confidence_level(confidence_level: float, simultaneous_m: Optional[int]) -> float:
+    r"""Return the per-rule confidence level after a Bonferroni adjustment.
+
+    With family size :math:`m`, each interval is computed at
+    :math:`1 - \alpha_{\mathrm{eff}}` where
+    :math:`\alpha_{\mathrm{eff}} = (1 - \text{confidence\_level}) / m`, so the
+    *m* intervals hold simultaneously with probability at least
+    ``confidence_level``.
+
+    Parameters
+    ----------
+    confidence_level : float
+        Nominal family-wise coverage, e.g. ``0.95``.
+    simultaneous_m : int, optional
+        Family size.  ``None`` or ``1`` leaves *confidence_level* unchanged.
+
+    Returns
+    -------
+    float
+        Per-rule confidence level.
+    """
+    if simultaneous_m is None or simultaneous_m <= 1:
+        return confidence_level
+    return 1.0 - (1.0 - confidence_level) / float(simultaneous_m)

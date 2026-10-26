@@ -48,3 +48,21 @@ for action_rule in action_rules.get_rules().get_pretty_ar_notation():
 # JSON export
 print(action_rules.get_rules().get_export_notation())
 ```
+
+## Confidence intervals
+
+After fitting, `confidence_intervals()` attaches an interval to every rule. All methods and options
+(`analytic_type`, `bootstrap_type`, `resample_mode`, `prior`, `simultaneous_m`, `discovery_fraction`,
+`estimation_data`) are described in the README section *Confidence Intervals* and in the API reference.
+
+```python
+# Bootstrap with a Bonferroni adjustment over all reported rules
+n_rules = len(action_rules.get_rules().action_rules)
+results = action_rules.confidence_intervals(data, method="bootstrap", simultaneous_m=n_rules, random_state=42)
+
+# Bayesian intervals with the Jeffreys prior
+results = action_rules.confidence_intervals(data, method="bayesian", prior="jeffreys", random_state=42)
+
+# Honest intervals: rules re-mined on a discovery split, intervals on the disjoint estimation split
+results = action_rules.confidence_intervals(data, method="honest_split", discovery_fraction=0.5, random_state=42)
+```

@@ -1151,6 +1151,63 @@ class TestCLI:
             os.unlink(csv_path)
             os.unlink(json_path)
 
+    @pytest.mark.parametrize(
+        "ci_args, expected_method",
+        [
+            (['--ci_method', 'bootstrap', '--resample_mode', 'multinomial', '--simultaneous_m', '3'], 'bootstrap'),
+            (['--ci_method', 'bayesian', '--prior', 'jeffreys'], 'bayesian'),
+            (['--ci_method', 'honest_split', '--discovery_fraction', '0.6', '--random_state', '0'], 'analytic'),
+        ],
+    )
+    def test_cli_new_ci_options(self, ci_args, expected_method):
+        """The v2.1 CI options are reachable from the CLI and reach confidence_intervals()."""
+        from click.testing import CliRunner
+
+        from action_rules.cli import main
+
+        csv_path = self._make_csv()
+        with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as f:
+            json_path = f.name
+
+        try:
+            base_args = [
+                '--min_stable_attributes',
+                '1',
+                '--min_flexible_attributes',
+                '1',
+                '--min_undesired_support',
+                '1',
+                '--min_undesired_confidence',
+                '0.5',
+                '--min_desired_support',
+                '1',
+                '--min_desired_confidence',
+                '0.5',
+                '--csv_path',
+                csv_path,
+                '--stable_attributes',
+                'Sex',
+                '--flexible_attributes',
+                'Class',
+                '--target',
+                'Survived',
+                '--undesired_state',
+                '0',
+                '--desired_state',
+                '1',
+                '--output_json_path',
+                json_path,
+            ]
+            result = CliRunner().invoke(main, base_args + ci_args)
+            assert result.exit_code == 0, f"CLI failed with output:\n{result.output}"
+            with open(json_path) as f:
+                rules = json.loads(f.read())
+            for rule_dict in rules:
+                assert rule_dict['ci']['method'] == expected_method
+        finally:
+            os.unlink(csv_path)
+            os.unlink(json_path)
+
 
 class TestV210Extensions:
     """Integration tests for v2.1.0 confidence_intervals methods and options."""
@@ -1170,3 +1227,154 @@ class TestV210Extensions:
             data, method="bootstrap", n_bootstrap=50, random_state=42, resample_mode="multinomial"
         )
         assert len(res_mult) == len(ar.output.action_rules)
+
+
+_BIG = pd.concat([_DATA] * 10, ignore_index=True)
+# Flip ~15 % of the targets so no rule has a confidence of exactly 0 or 1 (which gives zero-width Wald intervals).
+_BIG_NOISY = _BIG.copy()
+_flip = np.random.default_rng(0).random(len(_BIG_NOISY)) < 0.15
+_BIG_NOISY.loc[_flip, 'Survived'] = _BIG_NOISY.loc[_flip, 'Survived'].map({'0': '1', '1': '0'})
+_FIT_ARGS = dict(
+    stable_attributes=['Sex'],
+    flexible_attributes=['Class'],
+    target='Survived',
+    target_undesired_state='0',
+    target_desired_state='1',
+)
+
+
+def _make_big_action_rules(support: int = 10) -> ActionRules:
+    """Return an unfitted ActionRules with absolute support thresholds suited to ``_BIG``."""
+    return ActionRules(
+        min_stable_attributes=1,
+        min_flexible_attributes=1,
+        min_undesired_support=support,
+        min_undesired_confidence=0.5,
+        min_desired_support=support,
+        min_desired_confidence=0.5,
+    )
+
+
+def _rule_keys(ar: ActionRules) -> list:
+    """Return the (undesired, desired) itemsets of the mined rules in a comparable form."""
+    assert ar.output is not None
+    return [(tuple(r['undesired']['itemset']), tuple(r['desired']['itemset'])) for r in ar.output.action_rules]
+
+
+class TestV211HonestSplit:
+    """``method='honest_split'`` mines on the discovery part only and estimates on the disjoint rest."""
+
+    def test_split_is_disjoint_and_rules_come_from_discovery_part(self):
+        """Rules equal a fresh fit on the discovery rows with support thresholds scaled by their share."""
+        ar = _make_big_action_rules(support=10)
+        ar.fit(_BIG.copy(), **_FIT_ARGS)
+        results = ar.confidence_intervals(_BIG, method='honest_split', random_state=0)
+
+        disc, est = ar.honest_split_indices
+        assert len(disc) == len(est) == 100
+        assert not set(disc) & set(est)
+        assert set(disc) | set(est) == set(range(len(_BIG)))
+
+        ref = _make_big_action_rules(support=5)
+        ref.fit(_BIG.iloc[disc].reset_index(drop=True), **_FIT_ARGS)
+        assert _rule_keys(ar) == _rule_keys(ref)
+        assert len(results) == len(ar.output.action_rules) > 0
+        # The user's thresholds survive the internal re-fit.
+        assert ar.min_undesired_support == 10 and ar.min_desired_support == 10
+
+    def test_rules_do_not_depend_on_estimation_rows(self):
+        """Overwriting the target on the estimation rows leaves the discovered rules unchanged."""
+        ar = _make_big_action_rules()
+        ar.fit(_BIG.copy(), **_FIT_ARGS)
+        ar.confidence_intervals(_BIG, method='honest_split', random_state=3)
+        _, est = ar.honest_split_indices
+
+        corrupted = _BIG.copy()
+        corrupted.loc[est, 'Survived'] = '0'
+        ar2 = _make_big_action_rules()
+        ar2.fit(corrupted.copy(), **_FIT_ARGS)
+        ar2.confidence_intervals(corrupted, method='honest_split', random_state=3)
+        assert _rule_keys(ar2) == _rule_keys(ar)
+
+    @pytest.mark.parametrize("analytic_type", ['wald', 'newcombe_wilson', 'clopper_pearson'])
+    def test_intervals_use_estimation_rows_and_requested_analytic_type(self, analytic_type):
+        """Intervals equal the analytic engine (same analytic_type, no silent switch) on the estimation rows."""
+        from action_rules.inference.analytic import AnalyticEngine
+        from action_rules.inference.base import extract_rule_masks
+
+        ar = _make_big_action_rules()
+        ar.fit(_BIG.copy(), **_FIT_ARGS)
+        results = ar.confidence_intervals(_BIG, method='honest_split', random_state=1, analytic_type=analytic_type)
+        _, est = ar.honest_split_indices
+        expected = AnalyticEngine(analytic_type=analytic_type).compute(
+            _BIG.iloc[est].reset_index(drop=True), extract_rule_masks(ar.output)
+        )
+        for got, exp in zip(results, expected):
+            assert got.support == exp.support
+            assert got.uplift_ci_lower == pytest.approx(exp.uplift_ci_lower)
+            assert got.uplift_ci_upper == pytest.approx(exp.uplift_ci_upper)
+
+    def test_estimation_data_skips_re_mining(self):
+        """With a pre-split holdout the fitted rules are kept and intervals come from the holdout."""
+        from action_rules.inference.analytic import AnalyticEngine
+        from action_rules.inference.base import extract_rule_masks
+
+        discovery, holdout = _BIG.iloc[:100].reset_index(drop=True), _BIG.iloc[100:].reset_index(drop=True)
+        ar = _make_big_action_rules(support=5)
+        ar.fit(discovery.copy(), **_FIT_ARGS)
+        output_before = ar.output
+        results = ar.confidence_intervals(discovery, method='honest_split', estimation_data=holdout)
+        assert ar.output is output_before
+        assert ar.honest_split_indices is None
+        expected = AnalyticEngine().compute(holdout, extract_rule_masks(ar.output))
+        assert [r.uplift_ci_lower for r in results] == pytest.approx([e.uplift_ci_lower for e in expected])
+
+    def test_degenerate_discovery_fraction_raises(self):
+        """A fraction that leaves one side empty is rejected."""
+        ar = _make_big_action_rules()
+        ar.fit(_BIG.copy(), **_FIT_ARGS)
+        with pytest.raises(ValueError, match="strictly between"):
+            ar.confidence_intervals(_BIG, method='honest_split', discovery_fraction=1.0)
+        with pytest.raises(ValueError, match="empty discovery or estimation"):
+            ar.confidence_intervals(_BIG, method='honest_split', discovery_fraction=0.001)
+
+
+class TestV211OptionValidation:
+    """Method-specific options are validated instead of being silently ignored."""
+
+    @pytest.mark.parametrize(
+        "kwargs, match",
+        [
+            (dict(method='bootstrap', resample_mode='bogus'), "Unknown resample_mode"),
+            (dict(method='wald', resample_mode='multinomial'), "requires method='bootstrap'"),
+            (dict(method='bayesian', resample_mode='multinomial'), "requires method='bootstrap'"),
+            (dict(method='bootstrap', prior='jeffreys'), "prior requires"),
+            (dict(method='jeffreys', prior='uniform'), "fixes prior='jeffreys'"),
+            (dict(method='wald', discovery_fraction=0.5), "discovery_fraction requires"),
+            (dict(method='wald', estimation_data=_DATA), "estimation_data requires"),
+            (dict(method='honest_split', discovery_fraction=0.5, estimation_data=_DATA), "not both"),
+            (dict(method='bootstrap', simultaneous_m=0), "simultaneous_m"),
+            (dict(method='bayesian', simultaneous_m=1.5), "simultaneous_m"),
+            (dict(method='nonsense'), "Unknown method"),
+        ],
+    )
+    def test_invalid_option_combinations_raise(self, fitted_ar, kwargs, match):
+        """Each invalid combination raises a ValueError naming the problem."""
+        ar, data = fitted_ar
+        with pytest.raises(ValueError, match=match):
+            ar.confidence_intervals(data, **kwargs)
+
+    @pytest.mark.parametrize(
+        "method", ['bootstrap', 'bca', 'bayesian', 'jeffreys', 'wald', 'wald_rd', 'newcombe_wilson', 'clopper_pearson']
+    )
+    def test_simultaneous_m_widens_every_method(self, method):
+        """Bonferroni simultaneous_m widens intervals for every engine, keeping the nominal level."""
+        ar = _make_big_action_rules()
+        ar.fit(_BIG_NOISY.copy(), **_FIT_ARGS)
+        kwargs = dict(method=method, random_state=0, n_bootstrap=1000, n_mc=5000)
+        base = ar.confidence_intervals(_BIG_NOISY, **kwargs)
+        adjusted = ar.confidence_intervals(_BIG_NOISY, simultaneous_m=20, **kwargs)
+        assert len(base) > 0
+        for b, a in zip(base, adjusted):
+            assert (a.uplift_ci_upper - a.uplift_ci_lower) > (b.uplift_ci_upper - b.uplift_ci_lower)
+            assert a.confidence_level == pytest.approx(0.95)

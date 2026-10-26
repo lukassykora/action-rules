@@ -1,12 +1,13 @@
 """Console script for action_rules."""
 
 import os
-from typing import BinaryIO
+from typing import BinaryIO, Optional
 
 import click
 import pandas as pd
 
 from action_rules import ActionRules
+from action_rules.action_rules import ANALYTIC_TYPES, CI_METHODS
 
 
 @click.command()
@@ -103,9 +104,10 @@ from action_rules import ActionRules
 )
 @click.option(
     '--ci_method',
-    type=click.Choice(['bootstrap', 'analytic', 'wald', 'bayesian']),
+    type=click.Choice(list(CI_METHODS)),
     default=None,
-    help='Confidence interval method. If not set, no CI is computed.',
+    help='Confidence interval method. If not set, no CI is computed. honest_split re-mines the rules on a '
+    'discovery split and computes analytic CIs on the disjoint estimation split.',
 )
 @click.option(
     '--confidence_level',
@@ -139,16 +141,40 @@ from action_rules import ActionRules
 )
 @click.option(
     '--analytic_type',
-    type=click.Choice(['wald', 'wilson', 'newcombe_wilson', 'auto']),
+    type=click.Choice(list(ANALYTIC_TYPES)),
     default='wald',
-    help='Sub-type for analytic method: wald (default), newcombe_wilson '
-    "(alias 'wilson'), or auto.",
+    help="Sub-type for analytic and honest_split methods: wald (default), wald_rd (alias 'wald_random'), "
+    "newcombe_wilson (alias 'wilson'), clopper_pearson, or auto.",
 )
 @click.option(
     '--bootstrap_type',
     type=click.Choice(['percentile', 'bca']),
     default='percentile',
     help='Sub-type for bootstrap method: percentile (default) or bca.',
+)
+@click.option(
+    '--prior',
+    type=click.Choice(['uniform', 'laplace', 'jeffreys', 'haldane']),
+    default=None,
+    help='Named Beta prior for the bayesian method (default: uniform).',
+)
+@click.option(
+    '--simultaneous_m',
+    type=click.IntRange(min=1),
+    default=None,
+    help='Bonferroni family size m: each CI is computed at alpha / m. Applies to every CI method.',
+)
+@click.option(
+    '--resample_mode',
+    type=click.Choice(['rows', 'multinomial']),
+    default='rows',
+    help='Bootstrap resampling scheme: rows (default) or multinomial. Only for bootstrap and bca.',
+)
+@click.option(
+    '--discovery_fraction',
+    type=click.FloatRange(min=0.0, max=1.0, min_open=True, max_open=True),
+    default=None,
+    help='Share of rows used for rule discovery with honest_split (default: 0.5).',
 )
 def main(
     min_stable_attributes: int,
@@ -173,6 +199,10 @@ def main(
     random_state: int,
     analytic_type: str,
     bootstrap_type: str,
+    prior: Optional[str],
+    simultaneous_m: Optional[int],
+    resample_mode: str,
+    discovery_fraction: Optional[float],
 ):
     """
     CLI.
@@ -211,7 +241,8 @@ def main(
     use_gpu : bool
         Use GPU (cuDF) for data processing if available.
     ci_method : str, optional
-        Confidence interval method ('bootstrap', 'analytic', or 'bayesian'). No CI computed if None.
+        Confidence interval method (any method accepted by ``ActionRules.confidence_intervals``). No CI computed
+        if None.
     confidence_level : float
         Confidence level for CI (default: 0.95).
     ci_threshold : float, optional
@@ -222,6 +253,18 @@ def main(
         Number of Monte Carlo draws for Bayesian method (default: 10000).
     random_state : int, optional
         Random seed for reproducibility.
+    analytic_type : str
+        Sub-type for the analytic and honest_split methods.
+    bootstrap_type : str
+        Sub-type for the bootstrap method.
+    prior : str, optional
+        Named Beta prior for the bayesian method.
+    simultaneous_m : int, optional
+        Bonferroni family size applied to every CI method.
+    resample_mode : str
+        Bootstrap resampling scheme ('rows' or 'multinomial').
+    discovery_fraction : float, optional
+        Share of rows used for rule discovery with honest_split.
 
     Returns
     -------
@@ -259,6 +302,10 @@ def main(
             random_state=random_state,
             analytic_type=analytic_type,
             bootstrap_type=bootstrap_type,
+            prior=prior,
+            simultaneous_m=simultaneous_m,
+            resample_mode=resample_mode,
+            discovery_fraction=discovery_fraction,
         )
     rules = action_rules.get_rules()
     if rules is not None:

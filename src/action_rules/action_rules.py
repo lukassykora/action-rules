@@ -17,6 +17,25 @@ if TYPE_CHECKING:
     import numpy
     import pandas
 
+# Methods accepted by ActionRules.confidence_intervals().
+CI_METHODS = (
+    'bootstrap',
+    'bca',
+    'analytic',
+    'wald',
+    'wald_rd',
+    'wald_random',
+    'wilson',
+    'newcombe_wilson',
+    'clopper_pearson',
+    'auto',
+    'bayesian',
+    'jeffreys',
+    'honest_split',
+)
+# Sub-types accepted by the analytic engine (analytic_type).
+ANALYTIC_TYPES = ('wald', 'wald_rd', 'wald_random', 'wilson', 'newcombe_wilson', 'clopper_pearson', 'auto')
+
 
 class ActionRules:
     """
@@ -139,6 +158,10 @@ class ActionRules:
         self._original_intrinsic_utility_table = {}  # type: dict
         self._original_transition_utility_table = {}  # type: dict
         self._column_values = None  # type: Optional[dict]
+        # Arguments of the last fit(), reused by confidence_intervals(method='honest_split') to re-mine rules.
+        self._fit_spec = None  # type: Optional[dict]
+        # (discovery_rows, estimation_rows) of the last honest split, as positions in the data passed to it.
+        self.honest_split_indices = None  # type: Optional[tuple]
 
     def count_max_nodes(self, stable_items_binding: dict, flexible_items_binding: dict) -> int:
         """
@@ -565,6 +588,14 @@ class ActionRules:
         # truthy string as a plain GPU request instead of raising.
         if isinstance(use_gpu, str):
             use_gpu = use_gpu.strip().lower() not in ("", "false", "cpu", "no", "0")
+        self._fit_spec = {
+            'stable_attributes': list(stable_attributes),
+            'flexible_attributes': list(flexible_attributes),
+            'target': target,
+            'target_undesired_state': target_undesired_state,
+            'target_desired_state': target_desired_state,
+            'use_gpu': use_gpu,
+        }
 
         # reset cached bitset structures before fitting a new model
         self.bit_masks = None
@@ -912,7 +943,8 @@ class ActionRules:
         prior: Optional[str] = None,
         simultaneous_m: Optional[int] = None,
         resample_mode: str = "rows",
-        discovery_fraction: float = 0.5,
+        discovery_fraction: Optional[float] = None,
+        estimation_data=None,
     ):
         r"""Compute confidence intervals for all fitted action rules.
 
@@ -924,18 +956,38 @@ class ActionRules:
         ----------
         data : Union[cudf.DataFrame, pandas.DataFrame]
             The original (pre-encoding) dataset used for inference.  Columns
-            must match the attribute names supplied during ``fit()``.
+            must match the attribute names supplied during ``fit()``.  With
+            ``method='honest_split'`` this is the dataset that is split into
+            discovery and estimation parts (ignored when *estimation_data* is
+            given).
         method : str, optional
             CI method to use.  One of:
 
-            - ``'bootstrap'`` — non-parametric percentile bootstrap
-              (default).
-            - ``'analytic'`` or ``'wald'`` — closed-form Wald interval via
-              the delta method (requires ``scipy``).
+            - ``'bootstrap'`` — non-parametric bootstrap (default); the
+              variant is chosen by *bootstrap_type* and *resample_mode*.
+            - ``'bca'`` — shortcut for ``method='bootstrap'`` with
+              ``bootstrap_type='bca'``.
+            - ``'analytic'`` or ``'wald'`` — closed-form interval selected by
+              *analytic_type* (requires ``scipy``).
+            - ``'wald_rd'`` (alias ``'wald_random'``), ``'newcombe_wilson'``
+              (alias ``'wilson'``), ``'clopper_pearson'``, ``'auto'`` —
+              shortcuts for ``method='analytic'`` with that *analytic_type*.
             - ``'bayesian'`` — Beta-Binomial conjugate model with Monte
-              Carlo posterior sampling.
+              Carlo posterior sampling; the prior is chosen by *prior*.
+            - ``'jeffreys'`` — shortcut for ``method='bayesian'`` with
+              ``prior='jeffreys'``.
+            - ``'honest_split'`` — two-stage sample splitting.  The rows of
+              *data* are split at random into disjoint discovery and
+              estimation parts; rules are re-mined on the discovery part only
+              (support thresholds scaled by its share of the rows) and their
+              analytic intervals (*analytic_type*) are computed on the
+              estimation part.  The fitted model, including ``self.output``,
+              is replaced by the discovery-part model so that the returned
+              intervals and the output notation refer to the same rules.
+              The support thresholds passed to the constructor are kept.
         confidence_level : float, optional
-            Nominal coverage probability, e.g. ``0.95`` (default).
+            Nominal coverage probability, e.g. ``0.95`` (default).  With
+            *simultaneous_m* it is the family-wise level.
         threshold : float, optional
             Decision boundary used to categorise rules after computing
             intervals.  When ``None`` (default), categorisation is skipped.
@@ -943,25 +995,31 @@ class ActionRules:
             Metric to use for categorisation when *threshold* is provided.
             One of ``'uplift'`` (default) or ``'realistic_rule_gain'``.
         n_bootstrap : int, optional
-            Number of bootstrap resamples.  Only used when
-            ``method='bootstrap'``.  Default ``1000``.
+            Number of bootstrap resamples.  Only used by the bootstrap
+            methods.  Default ``1000``.
         n_mc : int, optional
-            Number of Monte Carlo samples.  Only used when
-            ``method='bayesian'``.  Default ``10000``.
+            Number of Monte Carlo samples.  Only used by the Bayesian
+            methods.  Default ``10000``.
         random_state : int, optional
-            Seed for reproducibility.  Passed to the engine when applicable.
-            ``None`` uses the global NumPy random state.
+            Seed for reproducibility.  Passed to the engine when applicable
+            and used for the honest split.  ``None`` uses fresh entropy.
         analytic_type : str, optional
-            Sub-type of the analytic method.  Only used when
-            ``method='analytic'`` or ``method='wald'``.  One of:
+            Sub-type of the analytic method.  Used when ``method`` is
+            ``'analytic'``, ``'wald'`` or ``'honest_split'``.  One of:
 
             - ``'wald'`` — standard Wald normal approximation (default).
+            - ``'wald_rd'`` (alias ``'wald_random'``) — random-design
+              delta-method Wald interval that also propagates the sampling
+              variability of the antecedent prevalence
+              :math:`\\hat{q}_u = n_u / N`.
             - ``'newcombe_wilson'`` (preferred) or ``'wilson'`` (alias) —
               Newcombe-Wilson interval (Newcombe, 1998) for the unscaled
               rule contrast :math:`\\delta = p_d + p_u - 1`, built by
               combining two single-proportion Wilson score intervals; the
               resulting interval is asymmetric.  ``'wilson'`` is retained
               as a backward-compatible alias.
+            - ``'clopper_pearson'`` — exact Clopper-Pearson single-proportion
+              intervals combined with Newcombe's square-and-add rule.
             - ``'auto'`` — Newcombe-Wilson when sample is small (``n < 40``)
               or proportion is extreme (``< 0.05`` or ``> 0.95``), Wald
               otherwise (following Agresti & Coull, 1998).
@@ -973,6 +1031,33 @@ class ActionRules:
             - ``'bca'`` — bias-corrected and accelerated (BCa) interval,
               which adjusts for bias and skewness using jackknife
               acceleration (Efron, 1987).
+        prior : str, optional
+            Named symmetric Beta prior for the Bayesian method:
+            ``'uniform'`` (alias ``'laplace'``, the default Beta(1, 1)),
+            ``'jeffreys'`` Beta(0.5, 0.5) or ``'haldane'`` Beta(0, 0).
+            Only allowed with ``method='bayesian'`` (or ``'jeffreys'`` with
+            ``prior='jeffreys'``).
+        simultaneous_m : int, optional
+            Bonferroni family size :math:`m \\ge 1`.  Every interval is
+            computed at :math:`\\alpha_{\\mathrm{eff}} = (1 -
+            \\text{confidence\\_level}) / m` so that *m* intervals hold
+            simultaneously with probability at least *confidence_level*.
+            Applies to every method.  ``None`` (default) means no adjustment.
+        resample_mode : str, optional
+            Bootstrap resampling scheme: ``'rows'`` (default) or
+            ``'multinomial'`` (vectorised 5-cell multinomial draws with the
+            same distribution).  A value other than ``'rows'`` is only
+            allowed with the bootstrap methods.
+        discovery_fraction : float, optional
+            Share of the rows used for discovery with
+            ``method='honest_split'``, strictly between 0 and 1.  ``None``
+            (default) means ``0.5``.  Only allowed with
+            ``method='honest_split'``.
+        estimation_data : Union[cudf.DataFrame, pandas.DataFrame], optional
+            Pre-split holdout for ``method='honest_split'``.  When given, the
+            model is **not** re-mined: it must already have been fitted on a
+            discovery dataset disjoint from *estimation_data*, and the
+            intervals for its rules are computed on *estimation_data*.
 
         Returns
         -------
@@ -986,7 +1071,8 @@ class ActionRules:
         RuntimeError
             If the model has not been fitted yet (``self.output is None``).
         ValueError
-            If *method* is not one of the supported values.
+            If *method* or any sub-type is not one of the supported values,
+            or an option is passed with a method that does not use it.
 
         Notes
         -----
@@ -994,84 +1080,65 @@ class ActionRules:
         ``self.output.set_confidence_intervals(results)`` so that subsequent
         calls to ``get_ar_notation()``, ``get_pretty_ar_notation()``, and
         ``get_export_notation()`` include the CI information.
+        ``ConfidenceIntervalResult.confidence_level`` always reports the
+        nominal *confidence_level*, also when *simultaneous_m* is set.
         """
         if self.output is None:
             raise RuntimeError("The model is not fit.")
-
-        if not (0 < confidence_level < 1):
+        if not (0.0 < confidence_level < 1.0):
             raise ValueError("confidence_level must be strictly between 0 and 1.")
+        if method not in CI_METHODS:
+            raise ValueError(f"Unknown method '{method}'. Supported methods: {', '.join(repr(m) for m in CI_METHODS)}.")
         if n_bootstrap < 1:
             raise ValueError("n_bootstrap must be >= 1.")
         if n_mc < 1:
             raise ValueError("n_mc must be >= 1.")
-        valid_analytic_types = {
-            "wald",
-            "wald_rd",
-            "wald_random",
-            "wilson",
-            "newcombe_wilson",
-            "clopper_pearson",
-            "auto",
-        }
-        if analytic_type not in valid_analytic_types:
-            raise ValueError(f"Unknown analytic_type '{analytic_type}'. Choose from {valid_analytic_types}.")
+        if analytic_type not in ANALYTIC_TYPES:
+            raise ValueError(f"Unknown analytic_type '{analytic_type}'. Choose from {set(ANALYTIC_TYPES)}.")
         valid_bootstrap_types = {"percentile", "bca"}
         if bootstrap_type not in valid_bootstrap_types:
             raise ValueError(f"Unknown bootstrap_type '{bootstrap_type}'. Choose from {valid_bootstrap_types}.")
-        valid_metrics = {"uplift", "realistic_rule_gain"}
-        if metric not in valid_metrics:
-            raise ValueError(f"Unknown metric '{metric}'. Choose from {valid_metrics}.")
+        self._validate_ci_options(method, prior, simultaneous_m, resample_mode, discovery_fraction, estimation_data)
 
+        # Lazy imports keep the inference subpackage optional at import time.
         from .inference.base import categorize_rule, extract_rule_masks
 
-        masks = extract_rule_masks(self.output)
         eval_data = data
-
         engine: Any
         if method in ("bootstrap", "bca"):
             from .inference.bootstrap import BootstrapEngine
 
-            eff_btype = "bca" if method == "bca" else bootstrap_type
             engine = BootstrapEngine(
                 n_bootstrap,
                 random_state,
-                bootstrap_type=eff_btype,
+                bootstrap_type="bca" if method == "bca" else bootstrap_type,
                 resample_mode=resample_mode,
+                simultaneous_m=simultaneous_m,
             )
-        elif method in ("analytic", "wald", "wald_rd", "wald_random", "wilson", "newcombe_wilson", "clopper_pearson", "auto"):
-            from .inference.analytic import AnalyticEngine
-
-            eff_atype = analytic_type if method in ("analytic", "wald") else method
-            engine = AnalyticEngine(analytic_type=eff_atype, simultaneous_m=simultaneous_m)
         elif method in ("bayesian", "jeffreys"):
             from .inference.bayesian import BayesianEngine
 
-            eff_prior = "jeffreys" if method == "jeffreys" else prior
-            engine = BayesianEngine(n_mc, random_state=random_state, prior=eff_prior)
-        elif method == "honest_split":
-            if not (0.0 < discovery_fraction < 1.0):
-                raise ValueError("discovery_fraction must be strictly between 0 and 1.")
-            import numpy as _np
-
+            engine = BayesianEngine(
+                n_mc,
+                random_state=random_state,
+                prior="jeffreys" if method == "jeffreys" else prior,
+                simultaneous_m=simultaneous_m,
+            )
+        else:
             from .inference.analytic import AnalyticEngine
 
-            rng_split = _np.random.default_rng(random_state)
-            n_rows = len(data)
-            perm = rng_split.permutation(n_rows)
-            n_disc = int(round(discovery_fraction * n_rows))
-            est_idx = perm[n_disc:]
-            eval_data = data.iloc[est_idx].reset_index(drop=True) if len(est_idx) > 0 else data
-            eff_atype = "newcombe_wilson" if analytic_type == "wald" else analytic_type
+            eff_atype = analytic_type if method in ("analytic", "wald", "honest_split") else method
             engine = AnalyticEngine(analytic_type=eff_atype, simultaneous_m=simultaneous_m)
-        else:
-            raise ValueError(
-                f"Unknown method '{method}'. Supported methods: 'bootstrap', 'bca', 'analytic', 'wald', "
-                f"'wald_rd', 'newcombe_wilson', 'clopper_pearson', 'auto', 'bayesian', 'jeffreys', 'honest_split'."
-            )
+            if method == "honest_split":
+                if estimation_data is not None:
+                    eval_data = estimation_data
+                else:
+                    fraction = 0.5 if discovery_fraction is None else discovery_fraction
+                    eval_data = self._refit_on_discovery_split(data, fraction, random_state)
 
         results = engine.compute(
             data=eval_data,
-            rules=masks,
+            rules=extract_rule_masks(self.output),
             confidence_level=confidence_level,
             intrinsic_utility_table=self._original_intrinsic_utility_table or None,
             transition_utility_table=self._original_transition_utility_table or None,
@@ -1095,6 +1162,86 @@ class ActionRules:
 
         self.output.set_confidence_intervals(results)
         return results
+
+    @staticmethod
+    def _validate_ci_options(method, prior, simultaneous_m, resample_mode, discovery_fraction, estimation_data):
+        """Reject method-specific options that the chosen *method* would silently ignore."""
+        from .inference.base import validate_simultaneous_m
+
+        validate_simultaneous_m(simultaneous_m)
+        if resample_mode not in ("rows", "multinomial"):
+            raise ValueError(f"Unknown resample_mode '{resample_mode}'. Choose from {{'rows', 'multinomial'}}.")
+        if resample_mode != "rows" and method not in ("bootstrap", "bca"):
+            raise ValueError(f"resample_mode='{resample_mode}' requires method='bootstrap' or 'bca'.")
+        if prior is not None:
+            if method not in ("bayesian", "jeffreys"):
+                raise ValueError("prior requires method='bayesian' (or 'jeffreys').")
+            if method == "jeffreys" and prior != "jeffreys":
+                raise ValueError(f"method='jeffreys' fixes prior='jeffreys'; got prior='{prior}'.")
+        if method != "honest_split":
+            if discovery_fraction is not None:
+                raise ValueError("discovery_fraction requires method='honest_split'.")
+            if estimation_data is not None:
+                raise ValueError("estimation_data requires method='honest_split'.")
+        elif discovery_fraction is not None:
+            if estimation_data is not None:
+                raise ValueError("Pass either discovery_fraction or estimation_data, not both.")
+            if not (0.0 < discovery_fraction < 1.0):
+                raise ValueError("discovery_fraction must be strictly between 0 and 1.")
+
+    def _unfitted_copy(self, support_scale: float = 1.0) -> 'ActionRules':
+        """Return a fresh, unfitted instance with the same hyperparameters and utility tables.
+
+        Absolute support thresholds are multiplied by *support_scale* (and kept at least 1) so that a
+        model mined on a subset of the rows applies the same prevalence requirements.
+        """
+        intrinsic = self._original_intrinsic_utility_table or dict(self.intrinsic_utility_table)
+        transition = self._original_transition_utility_table or dict(self.transition_utility_table)
+        return ActionRules(
+            min_stable_attributes=self.min_stable_attributes,
+            min_flexible_attributes=self.min_flexible_attributes,
+            min_undesired_support=max(1, int(round(self.min_undesired_support * support_scale))),
+            min_undesired_confidence=self.min_undesired_confidence,
+            min_desired_support=max(1, int(round(self.min_desired_support * support_scale))),
+            min_desired_confidence=self.min_desired_confidence,
+            verbose=self.verbose,
+            intrinsic_utility_table=intrinsic or None,
+            transition_utility_table=transition or None,
+        )
+
+    def _refit_on_discovery_split(self, data, discovery_fraction: float, random_state: Optional[int]):
+        """Re-mine rules on a random discovery part of *data* and return the disjoint estimation part.
+
+        The discovery-part model replaces the fitted state of ``self`` (rules, output, caches) so that
+        intervals computed afterwards refer to rules selected without the estimation rows.  The support
+        thresholds given to the constructor are restored afterwards.
+        """
+        if self._fit_spec is None or self.is_onehot:
+            raise ValueError(
+                "method='honest_split' re-mines rules and needs a model fitted with fit(); for models fitted "
+                "with fit_onehot(), fit on a discovery split yourself and pass estimation_data."
+            )
+        import numpy as np
+
+        n_rows = len(data)
+        n_disc = int(round(discovery_fraction * n_rows))
+        if n_disc < 1 or n_disc >= n_rows:
+            raise ValueError(
+                f"discovery_fraction={discovery_fraction} leaves an empty discovery or estimation split "
+                f"for {n_rows} rows."
+            )
+        perm = np.random.default_rng(random_state).permutation(n_rows)
+        disc_idx = np.sort(perm[:n_disc])
+        est_idx = np.sort(perm[n_disc:])
+
+        discovery = self._unfitted_copy(support_scale=n_disc / n_rows)
+        discovery.fit(data.iloc[disc_idx].reset_index(drop=True), **self._fit_spec)
+
+        min_supports = (self.min_undesired_support, self.min_desired_support)
+        self.__dict__.update(discovery.__dict__)
+        self.min_undesired_support, self.min_desired_support = min_supports
+        self.honest_split_indices = (disc_idx, est_idx)
+        return data.iloc[est_idx].reset_index(drop=True)
 
     def cross_validate(
         self,
@@ -1194,32 +1341,16 @@ class ActionRules:
         from .evaluation.cv import METRICS, STRATEGIES, CrossValidator
 
         # Snapshot the hyperparameters needed to build pristine per-fold instances.
-        min_stable_attributes = self.min_stable_attributes
-        min_flexible_attributes = self.min_flexible_attributes
         # Support thresholds are absolute counts.  When mining on a train fold
         # that is ``(n_splits-1)/n_splits`` of the full data, scale them down
         # proportionally so the same prevalence requirements apply on each fold.
         scale = (n_splits - 1) / n_splits if scale_support_thresholds else 1.0
-        min_undesired_support = max(1, int(round(self.min_undesired_support * scale)))
-        min_desired_support = max(1, int(round(self.min_desired_support * scale)))
-        min_undesired_confidence = self.min_undesired_confidence
-        min_desired_confidence = self.min_desired_confidence
-        verbose = self.verbose
+        template = self._unfitted_copy(support_scale=scale)
         intrinsic = self._original_intrinsic_utility_table or dict(self.intrinsic_utility_table)
         transition = self._original_transition_utility_table or dict(self.transition_utility_table)
 
         def _factory():
-            return ActionRules(
-                min_stable_attributes=min_stable_attributes,
-                min_flexible_attributes=min_flexible_attributes,
-                min_undesired_support=min_undesired_support,
-                min_undesired_confidence=min_undesired_confidence,
-                min_desired_support=min_desired_support,
-                min_desired_confidence=min_desired_confidence,
-                verbose=verbose,
-                intrinsic_utility_table=intrinsic or None,
-                transition_utility_table=transition or None,
-            )
+            return template._unfitted_copy()
 
         validator = CrossValidator(
             _factory,

@@ -13,7 +13,18 @@ from typing import List, Optional
 import numpy as np
 import pandas as pd
 
-from .base import ConfidenceIntervalResult, InferenceEngine, categorize_rule, compute_group_counts
+from .base import (
+    ConfidenceIntervalResult,
+    InferenceEngine,
+    bonferroni_confidence_level,
+    categorize_rule,
+    compute_group_counts,
+    validate_simultaneous_m,
+)
+
+# Floor for Beta posterior parameters.  Only reached with the Haldane prior
+# Beta(0, 0) when a count is zero, where the exact posterior is improper.
+POSTERIOR_EPSILON = 1e-3
 
 
 class BayesianEngine(InferenceEngine):
@@ -38,6 +49,14 @@ class BayesianEngine(InferenceEngine):
     random_state : int, optional
         Seed for :func:`numpy.random.default_rng`, enabling reproducible
         results.  ``None`` (default) uses a randomly initialised generator.
+    prior : str, optional
+        Named symmetric prior that overrides *prior_alpha* / *prior_beta*:
+        ``'uniform'`` (alias ``'laplace'``) Beta(1, 1), ``'jeffreys'``
+        Beta(0.5, 0.5), or ``'haldane'`` Beta(0, 0).  A zero posterior
+        parameter under the Haldane prior is floored at ``POSTERIOR_EPSILON``.
+    simultaneous_m : int, optional
+        Bonferroni family size.  When ``> 1`` each credible interval is
+        computed at ``alpha_eff = (1 - confidence_level) / simultaneous_m``.
 
     Notes
     -----
@@ -76,6 +95,7 @@ class BayesianEngine(InferenceEngine):
         random_state: Optional[int] = None,
         *,
         prior: Optional[str] = None,
+        simultaneous_m: Optional[int] = None,
     ):
         if prior is not None:
             prior_norm = prior.lower()
@@ -84,16 +104,20 @@ class BayesianEngine(InferenceEngine):
             elif prior_norm == "jeffreys":
                 prior_alpha, prior_beta = 0.5, 0.5
             elif prior_norm == "haldane":
-                prior_alpha, prior_beta = 0.01, 0.01
+                prior_alpha, prior_beta = 0.0, 0.0
             else:
                 raise ValueError(
                     f"Unknown prior '{prior}'. Choose from {{'uniform', 'laplace', 'jeffreys', 'haldane'}}."
                 )
+        if prior_alpha < 0 or prior_beta < 0:
+            raise ValueError(f"prior_alpha and prior_beta must be >= 0, got {prior_alpha}, {prior_beta}.")
+        validate_simultaneous_m(simultaneous_m)
         self.n_mc = n_mc
         self.prior_alpha = prior_alpha
         self.prior_beta = prior_beta
         self.random_state = random_state
         self.prior = prior
+        self.simultaneous_m = simultaneous_m
 
     # ------------------------------------------------------------------
     # Public API
@@ -151,7 +175,9 @@ class BayesianEngine(InferenceEngine):
         # New-style RNG for reproducibility (numpy >= 1.17).
         rng = np.random.default_rng(self.random_state)
 
-        alpha = 1.0 - confidence_level
+        # Results report the nominal (family-wise) level; the per-rule level
+        # carries the Bonferroni adjustment.
+        alpha = 1.0 - bonferroni_confidence_level(confidence_level, self.simultaneous_m)
         pct_lower = 100.0 * alpha / 2.0
         pct_upper = 100.0 * (1.0 - alpha / 2.0)
 
@@ -166,12 +192,14 @@ class BayesianEngine(InferenceEngine):
             # no observation to update from, so we draw from the prior directly.
             # ------------------------------------------------------------------
             # Beta posterior for p_u (undesired confidence).
-            alpha_u = self.prior_alpha + n_u_match
-            beta_u = self.prior_beta + max(n_u_ante - n_u_match, 0)
+            # A zero posterior parameter (Haldane prior with a zero count) is
+            # improper, so it is floored at POSTERIOR_EPSILON.
+            alpha_u = max(self.prior_alpha + n_u_match, POSTERIOR_EPSILON)
+            beta_u = max(self.prior_beta + max(n_u_ante - n_u_match, 0), POSTERIOR_EPSILON)
 
             # Beta posterior for p_d (desired confidence).
-            alpha_d = self.prior_alpha + n_d_match
-            beta_d = self.prior_beta + max(n_d_ante - n_d_match, 0)
+            alpha_d = max(self.prior_alpha + n_d_match, POSTERIOR_EPSILON)
+            beta_d = max(self.prior_beta + max(n_d_ante - n_d_match, 0), POSTERIOR_EPSILON)
 
             # Draw MC samples from the two independent posteriors.
             p_u_draws = rng.beta(alpha_u, beta_u, size=self.n_mc)

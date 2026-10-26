@@ -459,6 +459,36 @@ class TestMultipleRules:
         eng_u = BayesianEngine(n_mc=100, random_state=0, prior="uniform")
         assert eng_u.prior_alpha == 1.0 and eng_u.prior_beta == 1.0
         eng_h = BayesianEngine(n_mc=100, random_state=0, prior="haldane")
-        assert eng_h.prior_alpha == 0.01 and eng_h.prior_beta == 0.01
+        assert eng_h.prior_alpha == 0.0 and eng_h.prior_beta == 0.0
         with pytest.raises(ValueError, match="Unknown prior"):
             BayesianEngine(prior="invalid_prior")
+        with pytest.raises(ValueError, match="must be >= 0"):
+            BayesianEngine(prior_alpha=-1.0)
+
+    def test_haldane_zero_count_uses_epsilon_floor(self):
+        """Haldane Beta(0, 0) with a zero failure count stays finite thanks to the epsilon floor."""
+        data = _make_data(n=200)
+        # The synthetic data has no undesired-antecedent failures, so beta_u = 0 + 0 before the floor.
+        n_u_ante, n_u_match, _, _, _ = compute_group_counts(data, _make_rule())
+        assert n_u_ante == n_u_match
+        result = BayesianEngine(n_mc=2000, random_state=0, prior="haldane").compute(data, [_make_rule()])[0]
+        assert math.isfinite(result.uplift_ci_lower) and math.isfinite(result.uplift_ci_upper)
+
+    def test_jeffreys_quantiles_differ_from_uniform(self):
+        """On a small sample the Jeffreys prior shifts the credible interval relative to the uniform prior."""
+        data = _make_data(n=30)
+        uni = BayesianEngine(n_mc=20000, random_state=1, prior="uniform").compute(data, [_make_rule()])[0]
+        jef = BayesianEngine(n_mc=20000, random_state=1, prior="jeffreys").compute(data, [_make_rule()])[0]
+        # With all-success counts the weaker Jeffreys prior pulls less towards 0.5, so the bounds move up.
+        assert jef.uplift_ci_lower > uni.uplift_ci_lower
+        assert jef.uplift_ci_upper >= uni.uplift_ci_upper
+
+    def test_simultaneous_m_widens_credible_interval(self):
+        """Bonferroni simultaneous_m > 1 widens the credible interval but keeps the nominal level."""
+        data = _make_data(n=60, seed=3)
+        r1 = BayesianEngine(n_mc=20000, random_state=0).compute(data, [_make_rule()])[0]
+        r10 = BayesianEngine(n_mc=20000, random_state=0, simultaneous_m=10).compute(data, [_make_rule()])[0]
+        assert (r10.uplift_ci_upper - r10.uplift_ci_lower) > (r1.uplift_ci_upper - r1.uplift_ci_lower)
+        assert r10.confidence_level == pytest.approx(0.95)
+        with pytest.raises(ValueError, match="simultaneous_m"):
+            BayesianEngine(simultaneous_m=0)

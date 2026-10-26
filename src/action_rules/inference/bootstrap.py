@@ -10,9 +10,11 @@ from .base import (
     ConfidenceIntervalResult,
     InferenceEngine,
     RuleMasks,
+    bonferroni_confidence_level,
     categorize_rule,
     compute_realistic_gain,
     compute_uplift_from_counts,
+    validate_simultaneous_m,
 )
 
 # Emit one warning per rule when the fraction of resamples that hit a
@@ -99,6 +101,15 @@ class BootstrapEngine(InferenceEngine):
     bootstrap_type : str, optional
         Which bootstrap CI variant to use.  Must be one of
         ``{'percentile', 'bca'}``.  Default ``'percentile'``.
+    resample_mode : str, optional
+        ``'rows'`` (default) draws ``n`` row indices with replacement.
+        ``'multinomial'`` draws the five cell counts (undesired match,
+        undesired non-match, desired match, desired non-match, other) in one
+        vectorised multinomial call; it targets the same distribution as
+        ``'rows'`` because the two antecedents of an action rule are disjoint.
+    simultaneous_m : int, optional
+        Bonferroni family size.  When ``> 1`` each interval is computed at
+        ``alpha_eff = (1 - confidence_level) / simultaneous_m``.
 
     Notes
     -----
@@ -135,6 +146,7 @@ class BootstrapEngine(InferenceEngine):
         *,
         bootstrap_type: str = "percentile",
         resample_mode: str = "rows",
+        simultaneous_m: Optional[int] = None,
     ):
         valid = {"percentile", "bca"}
         if bootstrap_type not in valid:
@@ -142,10 +154,88 @@ class BootstrapEngine(InferenceEngine):
         valid_modes = {"rows", "multinomial"}
         if resample_mode not in valid_modes:
             raise ValueError(f"Unknown resample_mode '{resample_mode}'. Choose from {valid_modes}.")
+        validate_simultaneous_m(simultaneous_m)
         self.n_bootstrap = n_bootstrap
         self.random_state = random_state
         self.bootstrap_type = bootstrap_type
         self.resample_mode = resample_mode
+        self.simultaneous_m = simultaneous_m
+
+    def _resample_multinomial(
+        self,
+        rng: np.random.Generator,
+        masks: tuple,
+        n: int,
+        rule: RuleMasks,
+        uplift_samples: np.ndarray,
+        gain_samples: Optional[np.ndarray],
+        gain_args: Optional[tuple],
+    ) -> int:
+        """Fill the sample arrays from vectorised 5-cell multinomial draws.
+
+        Returns the number of degenerate resamples (``n_u = 0`` or ``n_d = 0``).
+        """
+        u_ante, u_match, d_ante, d_match = masks
+        c_u_match = int(u_match.sum())
+        c_d_match = int(d_match.sum())
+        counts = [c_u_match, int(u_ante.sum()) - c_u_match, c_d_match, int(d_ante.sum()) - c_d_match]
+        counts.append(n - sum(counts))
+        probs = np.array(counts, dtype=float) / float(n)
+        draws = rng.multinomial(n, probs, size=self.n_bootstrap)
+        nu_arr = draws[:, 0] + draws[:, 1]
+        nd_arr = draws[:, 2] + draws[:, 3]
+        valid_mask = (nu_arr > 0) & (nd_arr > 0)
+        if not np.any(valid_mask):
+            return self.n_bootstrap
+        conf_u_arr = draws[valid_mask, 0] / nu_arr[valid_mask]
+        conf_d_arr = draws[valid_mask, 2] / nd_arr[valid_mask]
+        uplift_samples[valid_mask] = (conf_d_arr + conf_u_arr - 1.0) * (nu_arr[valid_mask] / float(n))
+        if gain_samples is not None and gain_args is not None:
+            for idx_b, conf_u, conf_d in zip(np.flatnonzero(valid_mask), conf_u_arr, conf_d_arr):
+                gain_samples[idx_b] = compute_realistic_gain(rule, float(conf_u), float(conf_d), *gain_args)
+        return int((~valid_mask).sum())
+
+    def _resample_rows(
+        self,
+        rng: np.random.Generator,
+        masks: tuple,
+        n: int,
+        rule: RuleMasks,
+        uplift_samples: np.ndarray,
+        gain_samples: Optional[np.ndarray],
+        gain_args: Optional[tuple],
+    ) -> int:
+        """Fill the sample arrays from row-level resamples drawn with replacement.
+
+        Returns the number of degenerate resamples (``n_u = 0`` or ``n_d = 0``).
+        """
+        u_ante, u_match, d_ante, d_match = masks
+        n_undefined = 0
+        for b in range(self.n_bootstrap):
+            # Draw a bootstrap resample (with replacement) using integer
+            # index sampling, which is compatible with default_rng.
+            indices = rng.integers(0, n, size=n)
+
+            # Fancy-index the pre-computed boolean masks instead of
+            # slicing the DataFrame — avoids Python-level iteration and
+            # repeated string comparisons.
+            n_u_ante = int(u_ante[indices].sum())
+            n_u_match = int(u_match[indices].sum())
+            n_d_ante = int(d_ante[indices].sum())
+            n_d_match = int(d_match[indices].sum())
+
+            # Skip resamples where antecedent support is zero — uplift is
+            # undefined for these draws.  Track the fraction so the caller
+            # can diagnose unstable percentile intervals on low-support rules.
+            if n_u_ante == 0 or n_d_ante == 0:
+                n_undefined += 1
+                continue
+
+            uplift_samples[b] = compute_uplift_from_counts(n_u_ante, n_u_match, n_d_ante, n_d_match, n)
+
+            if gain_samples is not None and gain_args is not None:
+                gain_samples[b] = compute_realistic_gain(rule, n_u_match / n_u_ante, n_d_match / n_d_ante, *gain_args)
+        return n_undefined
 
     # ------------------------------------------------------------------
     # Static helpers
@@ -417,7 +507,15 @@ class BootstrapEngine(InferenceEngine):
         rng = np.random.default_rng(self.random_state)
 
         n = len(data)
-        alpha = 1.0 - confidence_level
+        # Results report the nominal (family-wise) level; the per-rule level
+        # carries the Bonferroni adjustment.
+        level = bonferroni_confidence_level(confidence_level, self.simultaneous_m)
+        alpha = 1.0 - level
+        gain_args = (
+            (intrinsic_utility_table, transition_utility_table, column_values)
+            if compute_gain and column_values is not None
+            else None
+        )
         # Pre-compute tail percentile positions (avoids repeated arithmetic).
         pct_lower = 100.0 * alpha / 2.0
         pct_upper = 100.0 * (1.0 - alpha / 2.0)
@@ -437,81 +535,12 @@ class BootstrapEngine(InferenceEngine):
             if gain_samples is not None:
                 gain_samples[:] = np.nan
 
-            n_undefined = 0
-            if self.resample_mode == "multinomial" and n > 0:
-                c_u_match = int(u_match.sum())
-                c_u_nonmatch = max(int(u_ante.sum()) - c_u_match, 0)
-                c_d_match = int(d_match.sum())
-                c_d_nonmatch = max(int(d_ante.sum()) - c_d_match, 0)
-                c_other = max(n - (c_u_match + c_u_nonmatch + c_d_match + c_d_nonmatch), 0)
-                probs = np.array(
-                    [c_u_match, c_u_nonmatch, c_d_match, c_d_nonmatch, c_other],
-                    dtype=float,
-                )
-                total_p = probs.sum()
-                if total_p > 0:
-                    probs /= total_p
-                    draws = rng.multinomial(n, probs, size=self.n_bootstrap)
-                    nu_arr = draws[:, 0] + draws[:, 1]
-                    num_arr = draws[:, 0]
-                    nd_arr = draws[:, 2] + draws[:, 3]
-                    ndm_arr = draws[:, 2]
-                    valid_mask = (nu_arr > 0) & (nd_arr > 0)
-                    n_undefined = int((~valid_mask).sum())
-                    if np.any(valid_mask):
-                        conf_u_arr = num_arr[valid_mask] / nu_arr[valid_mask]
-                        conf_d_arr = ndm_arr[valid_mask] / nd_arr[valid_mask]
-                        d_arr = conf_d_arr + conf_u_arr - 1.0
-                        uplift_samples[valid_mask] = d_arr * (nu_arr[valid_mask] / float(n))
-                        if gain_samples is not None and column_values is not None:
-                            for idx_b in np.where(valid_mask)[0]:
-                                gain_samples[idx_b] = compute_realistic_gain(
-                                    rule,
-                                    float(num_arr[idx_b] / nu_arr[idx_b]),
-                                    float(ndm_arr[idx_b] / nd_arr[idx_b]),
-                                    intrinsic_utility_table,
-                                    transition_utility_table,
-                                    column_values,
-                                )
-                else:
-                    n_undefined = self.n_bootstrap
-            else:
-                for b in range(self.n_bootstrap):
-                    # Draw a bootstrap resample (with replacement) using integer
-                    # index sampling, which is compatible with default_rng.
-                    indices = rng.integers(0, n, size=n)
-
-                    # Fancy-index the pre-computed boolean masks instead of
-                    # slicing the DataFrame — avoids Python-level iteration and
-                    # repeated string comparisons.
-                    n_u_ante = int(u_ante[indices].sum())
-                    n_u_match = int(u_match[indices].sum())
-                    n_d_ante = int(d_ante[indices].sum())
-                    n_d_match = int(d_match[indices].sum())
-                    n_total = n
-
-                    # Skip resamples where antecedent support is zero — uplift is
-                    # undefined for these draws.  Track the fraction so the caller
-                    # can diagnose unstable percentile intervals on low-support rules.
-                    if n_u_ante == 0 or n_d_ante == 0:
-                        n_undefined += 1
-                        continue
-
-                    uplift_samples[b] = compute_uplift_from_counts(
-                        n_u_ante, n_u_match, n_d_ante, n_d_match, n_total
-                    )
-
-                    if gain_samples is not None and column_values is not None:
-                        conf_u = n_u_match / n_u_ante
-                        conf_d = n_d_match / n_d_ante
-                        gain_samples[b] = compute_realistic_gain(
-                            rule,
-                            conf_u,
-                            conf_d,
-                            intrinsic_utility_table,
-                            transition_utility_table,
-                            column_values,
-                        )
+            masks = (u_ante, u_match, d_ante, d_match)
+            # The multinomial shortcut assumes disjoint antecedents; fall back
+            # to row resampling for any rule where they overlap.
+            use_multinomial = self.resample_mode == "multinomial" and n > 0 and not np.any(u_ante & d_ante)
+            resample = self._resample_multinomial if use_multinomial else self._resample_rows
+            n_undefined = resample(rng, masks, n, rule, uplift_samples, gain_samples, gain_args)
 
             # Compute full-dataset counts from pre-computed masks.
             # These are needed by both percentile and BCa branches.
@@ -529,7 +558,7 @@ class BootstrapEngine(InferenceEngine):
                 )
                 jack_uplift = self._jackknife_uplift(u_ante, u_match, d_ante, d_match, n)
                 uplift_point, uplift_lower, uplift_upper, uplift_se = self._bca_ci(
-                    uplift_samples, original_uplift, jack_uplift, confidence_level
+                    uplift_samples, original_uplift, jack_uplift, level
                 )
 
                 gain_point: Optional[float] = None
@@ -564,7 +593,7 @@ class BootstrapEngine(InferenceEngine):
                         column_values,
                     )
                     gain_point, gain_lower, gain_upper, gain_se = self._bca_ci(
-                        gain_samples, original_gain, jack_gain, confidence_level
+                        gain_samples, original_gain, jack_gain, level
                     )
                     valid_gain = gain_samples[~np.isnan(gain_samples)]
                     clean_gain_samples = valid_gain if valid_gain.size > 0 else None

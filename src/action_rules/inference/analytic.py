@@ -34,9 +34,11 @@ import pandas as pd
 from .base import (
     ConfidenceIntervalResult,
     InferenceEngine,
+    bonferroni_confidence_level,
     categorize_rule,
     compute_group_counts,
     compute_realistic_gain,
+    validate_simultaneous_m,
 )
 
 
@@ -131,8 +133,7 @@ class AnalyticEngine(InferenceEngine):
         valid = {"wald", "wald_rd", "wald_random", "wilson", "newcombe_wilson", "clopper_pearson", "auto"}
         if analytic_type not in valid:
             raise ValueError(f"Unknown analytic_type '{analytic_type}'. Choose from {valid}.")
-        if simultaneous_m is not None and simultaneous_m < 1:
-            raise ValueError(f"simultaneous_m must be >= 1, got {simultaneous_m}.")
+        validate_simultaneous_m(simultaneous_m)
         # Canonicalise aliases
         if analytic_type == "wilson":
             self.analytic_type = "newcombe_wilson"
@@ -315,9 +316,7 @@ class AnalyticEngine(InferenceEngine):
 
         compute_gain = (intrinsic_utility_table is not None) or (transition_utility_table is not None)
 
-        alpha = 1.0 - confidence_level
-        if self.simultaneous_m is not None and self.simultaneous_m > 1:
-            alpha = alpha / float(self.simultaneous_m)
+        alpha = 1.0 - bonferroni_confidence_level(confidence_level, self.simultaneous_m)
         z = norm.ppf(1.0 - alpha / 2.0)
 
         results: List[ConfidenceIntervalResult] = []
@@ -373,16 +372,12 @@ class AnalyticEngine(InferenceEngine):
             if self.analytic_type == "clopper_pearson":
                 _, l_u, u_u = self._clopper_pearson_bounds(n_u_match, n_u_ante, alpha)
                 _, l_d, u_d = self._clopper_pearson_bounds(n_d_match, n_d_ante, alpha)
-                _, delta_lower, delta_upper = self._newcombe_delta_interval(
-                    p_u, l_u, u_u, p_d, l_d, u_d
-                )
+                _, delta_lower, delta_upper = self._newcombe_delta_interval(p_u, l_u, u_u, p_d, l_d, u_d)
             elif use_wilson:
                 # Newcombe (1998) combination of single-proportion Wilson intervals.
                 _, l_u, u_u = self._wilson_bounds(n_u_match, n_u_ante, z)
                 _, l_d, u_d = self._wilson_bounds(n_d_match, n_d_ante, z)
-                _, delta_lower, delta_upper = self._newcombe_delta_interval(
-                    p_u, l_u, u_u, p_d, l_d, u_d
-                )
+                _, delta_lower, delta_upper = self._newcombe_delta_interval(p_u, l_u, u_u, p_d, l_d, u_d)
             else:
                 # Wald delta-method interval for delta = p_d + p_u - 1.
                 delta_se = sqrt(var_delta)
@@ -393,7 +388,7 @@ class AnalyticEngine(InferenceEngine):
             uplift_point = delta_hat * scale
             if self.analytic_type == "wald_rd":
                 # Random-design delta-method variance: accounts for random antecedent prevalence q_u = n_u / N.
-                var_uplift = (scale ** 2) * var_delta + (delta_hat ** 2) * (scale * (1.0 - scale) / n_total)
+                var_uplift = (scale**2) * var_delta + (delta_hat**2) * (scale * (1.0 - scale) / n_total)
                 se_uplift = sqrt(var_uplift)
                 uplift_lower = uplift_point - z * se_uplift
                 uplift_upper = uplift_point + z * se_uplift

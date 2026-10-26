@@ -94,7 +94,7 @@ $ action-rules --min_stable_attributes 2 --min_flexible_attributes 1 --min_undes
 
 ### Confidence Intervals
 
-Compute confidence intervals for uplift and realistic rule gain using one of three methods: **bootstrap**, **analytic** (Wald), or **Bayesian**.
+Compute confidence intervals for uplift and realistic rule gain with **bootstrap** (percentile or BCa), **analytic** (Wald, random-design Wald, Newcombe-Wilson, Clopper-Pearson), **Bayesian** (uniform, Jeffreys or Haldane prior) or **honest sample-splitting** inference.
 
 ```console
 $ pip install action-rules[inference]   # adds scipy
@@ -115,7 +115,7 @@ action_rules.fit(data, stable_attributes, flexible_attributes, target, '0', '1')
 # Compute bootstrap confidence intervals
 results = action_rules.confidence_intervals(
     data,
-    method="bootstrap",      # "bootstrap", "analytic", "wald", or "bayesian"
+    method="bootstrap",      # see "Methods and options" below
     confidence_level=0.95,
     threshold=0.0,           # categorize rules as Accept/Reject/Uncertain
     n_bootstrap=1000,        # bootstrap resamples (bootstrap only)
@@ -124,13 +124,48 @@ results = action_rules.confidence_intervals(
 
 # Each result contains: uplift_point, uplift_ci_lower, uplift_ci_upper, uplift_se,
 # realistic_rule_gain_point/ci_lower/ci_upper/se (if utility tables provided),
-# category (RuleCategory.ACCEPT / REJECT / UNCERTAIN)
+# category (RuleCategory.ACCEPT / REJECT / UNCERTAIN / UNSUPPORTED)
 for r in results:
     print(f"Rule {r.rule_index}: uplift = {r.uplift_point:.4f} "
           f"[{r.uplift_ci_lower:.4f}, {r.uplift_ci_upper:.4f}] → {r.category.value}")
 
 # JSON export now includes CI data
 print(action_rules.get_rules().get_export_notation())
+```
+
+#### Methods and options
+
+| `method` | Interval |
+|---|---|
+| `bootstrap` (default), `bca` | Percentile or BCa bootstrap; `bootstrap_type`, `n_bootstrap`, `resample_mode` (`rows` or vectorised `multinomial`) |
+| `analytic` / `wald` | Closed form selected by `analytic_type`: `wald`, `wald_rd` (random design, alias `wald_random`), `newcombe_wilson` (alias `wilson`), `clopper_pearson`, `auto` |
+| `wald_rd`, `newcombe_wilson`, `clopper_pearson`, `auto` | Shortcuts for `method="analytic"` with that `analytic_type` |
+| `bayesian`, `jeffreys` | Beta-Binomial posterior; `prior` = `uniform` (default), `jeffreys` or `haldane`; `n_mc` |
+| `honest_split` | Rules re-mined on a discovery split, analytic intervals (`analytic_type`) on the disjoint estimation split |
+
+- `simultaneous_m=m` applies a Bonferroni adjustment to **every** method: each interval is computed at
+  `alpha / m`, so `m` intervals hold jointly with probability at least `confidence_level`.
+- Options that a method would not use (for example `prior` with `method="bootstrap"` or
+  `resample_mode="multinomial"` with an analytic method) raise `ValueError` instead of being ignored.
+
+#### Honest (selection-adjusted) intervals
+
+Intervals computed on the same rows that selected the rules are optimistic (winner's curse). With
+`method="honest_split"` the rows are split at random into disjoint discovery and estimation parts; the rules
+are re-mined on the discovery part only (support thresholds scaled by its share of the rows) and the
+intervals are computed on the estimation part. The fitted model, including `get_rules()`, is replaced by
+the discovery-part model so that the intervals and the rules match.
+
+```python
+action_rules.fit(data, stable_attributes, flexible_attributes, target, '0', '1')
+results = action_rules.confidence_intervals(
+    data, method="honest_split", discovery_fraction=0.5, analytic_type="newcombe_wilson", random_state=42
+)
+discovery_rows, estimation_rows = action_rules.honest_split_indices
+
+# Or with your own holdout: fit on the discovery data, estimate on the disjoint holdout.
+action_rules.fit(discovery, stable_attributes, flexible_attributes, target, '0', '1')
+results = action_rules.confidence_intervals(discovery, method="honest_split", estimation_data=holdout)
 ```
 
 #### Visualization
@@ -174,7 +209,13 @@ $ action-rules --min_stable_attributes 2 --min_flexible_attributes 1 \
 ```
 
 Available CI options:
-- `--ci_method` — `bootstrap`, `analytic`, `wald`, or `bayesian`
+- `--ci_method` — any `method` from the table above
+- `--analytic_type` — analytic sub-type for `analytic`, `wald` and `honest_split` (default: `wald`)
+- `--bootstrap_type` — `percentile` (default) or `bca`
+- `--resample_mode` — `rows` (default) or `multinomial` (bootstrap only)
+- `--prior` — `uniform`, `laplace`, `jeffreys` or `haldane` (Bayesian only)
+- `--simultaneous_m` — Bonferroni family size, applies to every method
+- `--discovery_fraction` — discovery share for `honest_split` (default: 0.5)
 - `--confidence_level` — confidence level (default: 0.95)
 - `--ci_threshold` — threshold for Accept/Reject/Uncertain categorization
 - `--n_bootstrap` — number of bootstrap resamples (default: 1000)

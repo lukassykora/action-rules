@@ -647,12 +647,47 @@ class TestDegenerateResampleReporting:
     def test_multinomial_resample_mode_matches_rows_distribution(self):
         """Vectorised 5-cell multinomial resampling agrees closely with row resampling."""
         data = _make_data(n=400)
-        r_rows = BootstrapEngine(n_bootstrap=500, random_state=42, resample_mode="rows").compute(
-            data, [_make_rule()]
-        )[0]
+        r_rows = BootstrapEngine(n_bootstrap=500, random_state=42, resample_mode="rows").compute(data, [_make_rule()])[
+            0
+        ]
         r_mult = BootstrapEngine(n_bootstrap=500, random_state=42, resample_mode="multinomial").compute(
             data, [_make_rule()]
         )[0]
         assert r_mult.uplift_point == pytest.approx(r_rows.uplift_point, abs=0.03)
         assert r_mult.uplift_ci_lower == pytest.approx(r_rows.uplift_ci_lower, abs=0.05)
         assert r_mult.uplift_ci_upper == pytest.approx(r_rows.uplift_ci_upper, abs=0.05)
+
+    def test_multinomial_falls_back_to_rows_for_overlapping_antecedents(self):
+        """When the two antecedents overlap the 5-cell model does not apply, so rows resampling is used."""
+        data = _make_data(n=200)
+        overlapping = RuleMasks(
+            mask_undesired={'age': '0'},
+            mask_desired={'class': '1'},
+            target_attribute='target',
+            target_undesired='0',
+            target_desired='1',
+            rule_index=0,
+            undesired_itemset=(0,),
+            desired_itemset=(2,),
+        )
+        r_rows = BootstrapEngine(n_bootstrap=200, random_state=5, resample_mode="rows").compute(data, [overlapping])[0]
+        r_mult = BootstrapEngine(n_bootstrap=200, random_state=5, resample_mode="multinomial").compute(
+            data, [overlapping]
+        )[0]
+        assert r_mult.uplift_ci_lower == r_rows.uplift_ci_lower
+        assert r_mult.uplift_ci_upper == r_rows.uplift_ci_upper
+
+    @pytest.mark.parametrize("bootstrap_type", ["percentile", "bca"])
+    def test_simultaneous_m_widens_interval(self, bootstrap_type):
+        """Bonferroni simultaneous_m > 1 widens percentile and BCa intervals but keeps the nominal level."""
+        data = _make_data(n=200)
+        kwargs = dict(n_bootstrap=2000, random_state=0, bootstrap_type=bootstrap_type)
+        r1 = BootstrapEngine(**kwargs).compute(data, [_make_rule()])[0]
+        r20 = BootstrapEngine(simultaneous_m=20, **kwargs).compute(data, [_make_rule()])[0]
+        assert (r20.uplift_ci_upper - r20.uplift_ci_lower) > (r1.uplift_ci_upper - r1.uplift_ci_lower)
+        assert r20.confidence_level == pytest.approx(0.95)
+
+    def test_invalid_simultaneous_m_raises(self):
+        """simultaneous_m must be a positive integer."""
+        with pytest.raises(ValueError, match="simultaneous_m"):
+            BootstrapEngine(simultaneous_m=0)

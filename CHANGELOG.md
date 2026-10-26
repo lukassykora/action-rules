@@ -200,3 +200,14 @@
 * Feature: Added `RuleCategory.UNSUPPORTED` and `ConfidenceIntervalResult.decision_status` for four-way rule categorisation (`accept`, `reject`, `uncertain`, `unsupported`) when antecedent support is zero or CI bounds are `NaN`.
 * Fix: Guarded `Rules.calculate_uplift` against zero division when `undesired_confidence == 0` or `count_transactions == 0`, and prevented self-pairing of identical classification rule itemsets in `Rules.generate_action_rules` when mining with low confidence thresholds (`< 0.5`).
 * Notebooks: Added automatic dataset download and caching fallbacks in `notebooks/article/_datasets.py` for UCI Bank Marketing, IBM Employee Attrition, and Taiwan Credit Card Default.
+
+## [2.1.1] - 2026-10-26
+
+* Fix: `method='honest_split'` is now a genuine two-stage procedure. The rows are split into disjoint discovery and estimation parts before mining; rules are re-mined on the discovery part only (support thresholds scaled by its share of the rows) and their intervals are computed on the estimation part. In 2.1.0 the rules were selected on the full data and only the intervals were recomputed on a random half, which left the selection bias in place. The fitted model is replaced by the discovery-part model and the split is exposed as `ActionRules.honest_split_indices`; a pre-split holdout can be passed as `estimation_data`.
+* Fix: `honest_split` respects `analytic_type` (an explicit `'wald'` is no longer switched to `'newcombe_wilson'`).
+* Fix: `simultaneous_m` (Bonferroni) now applies to every method — bootstrap, BCa, Bayesian and Jeffreys as well as the analytic intervals. `ConfidenceIntervalResult.confidence_level` keeps reporting the nominal family-wise level.
+* Fix: `confidence_intervals()` validates method-specific options instead of silently ignoring them: an unknown `resample_mode`, `resample_mode != 'rows'` with a non-bootstrap method, `prior` with a non-Bayesian method, and `discovery_fraction` / `estimation_data` without `honest_split` raise `ValueError`.
+* Fix: `prior='haldane'` is the exact Beta(0, 0) prior; a zero posterior parameter is floored at `POSTERIOR_EPSILON`. Negative prior parameters raise `ValueError`.
+* Fix: The multinomial bootstrap falls back to row resampling for rules whose antecedents overlap, where the 5-cell model does not apply.
+* Docs: Documented all v2.1 methods and options in the `confidence_intervals()` docstring, README and usage docs; the CLI gains `--prior`, `--simultaneous_m`, `--resample_mode`, `--discovery_fraction` and the new `--ci_method` / `--analytic_type` values.
+* CI: Replaced the removed `pymdownx.slugs.uslugify` in `mkdocs.yml`, capped `pymdown-extensions < 12` in the `doc` extra (version 12 breaks `mkdocstrings`), the deprecated `::set-output` and `skip_existing` in the release workflows, and split `BootstrapEngine.compute` to satisfy the flake8 complexity limit.

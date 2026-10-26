@@ -1882,6 +1882,7 @@ description = "Extension pack for Python Markdown and MkDocs Material."
 optional = true
 python-versions = ">=3.8"
 groups = ["main"]
+markers = "extra == \"doc\""
 files = [
     {file = "mkdocs_material_extensions-1.3.1-py3-none-any.whl", hash = "sha256:adff8b62700b25cb77b53358dad940f3ef973dd6db797907c49e3c2ef3ab4e31"},
     {file = "mkdocs_material_extensions-1.3.1.tar.gz", hash = "sha256:10c9511cea88f568257f960358a467d12b970e1f7b2c0e5fb2bb48cab1928443"},
@@ -3377,7 +3378,7 @@ test = ["big-O", "jaraco.functools", "jaraco.itertools", "jaraco.test", "more-it
 
 [extras]
 dev = ["bump2version", "pip", "pre-commit", "toml", "tox", "twine", "virtualenv"]
-doc = ["mkdocs", "mkdocs-autorefs", "mkdocs-include-markdown-plugin", "mkdocs-material", "mkdocstrings"]
+doc = ["mkdocs", "mkdocs-autorefs", "mkdocs-include-markdown-plugin", "mkdocs-material", "mkdocs-material-extensions", "mkdocstrings", "pymdown-extensions"]
 inference = ["scipy"]
 test = ["black", "flake8", "flake8-docstrings", "isort", "matplotlib", "mypy", "pytest", "pytest-cov", "scipy"]
 viz = ["matplotlib", "scipy"]
@@ -3385,4 +3386,4 @@ viz = ["matplotlib", "scipy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<4.0"
-content-hash = "0355d2ba723417a3a90e7ff696501791fe521f97221f5739f89eea6128d9e8ce"
+content-hash = "e068eb79a2e89ef8def23b00faf22023ac01eeb41a197e855d1b94cf14b3221b"
