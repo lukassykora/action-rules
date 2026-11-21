@@ -1,4 +1,4 @@
-"""E1: full 24-regime calibration of the intended Final manuscript."""
+"""E1: 24-regime calibration study against known truth."""
 from pathlib import Path
 import json,time,warnings
 import numpy as np

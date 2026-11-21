@@ -248,6 +248,10 @@ A self-contained suite of replicability notebooks for the package's confidence-i
 * [Sensitivity of the categorization to support-threshold perturbations](https://github.com/lukassykora/action-rules/blob/main/notebooks/inference_studies/06_threshold_sensitivity.ipynb)
 * [Sensitivity of realistic rule gain to a uniform cost-side rescaling of the utility tables](https://github.com/lukassykora/action-rules/blob/main/notebooks/inference_studies/07_utility_table_sensitivity.ipynb)
 
+## JIIS Reproducibility Scripts (Studies E1–E5)
+
+Reproducibility scripts for *Uncertainty Quantification for High-Utility Action Rules: Estimands, Calibration, and Honest Validation* live in [`experiments/jiis/`](https://github.com/lukassykora/action-rules/tree/main/experiments/jiis) ([setup and usage README](https://github.com/lukassykora/action-rules/blob/main/experiments/jiis/README.md)). They exercise the vectorised five-cell count-level inference module (`action_rules.inference.counts`: `infer_counts`, `decide_intervals`) across fixed and random sampling designs for per-matched-record gain ($G$), population-scaled contrast ($U$), and population-average gain ($H$).
+
 ## Performance
 
 * [Customer Churn (GPU vs. CPU, sparse matrix vs. dense matrix, Pandas vs. cuDF)](https://github.com/lukassykora/action-rules/blob/main/notebooks/Performance.ipynb)

@@ -5,4 +5,3 @@ matplotlib==3.11.2
 click==8.0.1
 pytest==8.4.2
 xlrd==2.0.2
-./action-rules[inference]

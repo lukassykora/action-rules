@@ -1,5 +1,5 @@
 #!/bin/sh
-# Run from the extracted research artifact; requires the documented Python environment.
+# Run from the repository root or extracted research artifact; requires the documented Python environment.
 set -eu
 STUDY_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 STUDY_PYTHON=${JIIS_PYTHON:-python3}
