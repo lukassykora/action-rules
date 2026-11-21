@@ -98,7 +98,6 @@ from action_rules.action_rules import ANALYTIC_TYPES, CI_METHODS
 @click.option(
     '--use_gpu',
     type=bool,
-    prompt='GPU acceleration',
     help='Use GPU (cuDF) for data processing if available.',
     default=False,
 )
